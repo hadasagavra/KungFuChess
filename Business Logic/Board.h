@@ -28,6 +28,7 @@ public:
     bool isEmpty(Position p) const;
     char colorAt(Position p) const;
     PieceType pieceTypeAt(Position p) const;
+    bool isKing(Position p) const;
     bool sameColor(Position a, Position b) const;
 
     void movePiece(Position from, Position to);

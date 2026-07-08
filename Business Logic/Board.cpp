@@ -38,6 +38,10 @@ PieceType Board::pieceTypeAt(Position p) const {
     return *charToPieceType(at(p)[1]);
 }
 
+bool Board::isKing(Position p) const {
+    return !isEmpty(p) && pieceTypeAt(p) == PieceType::King;
+}
+
 bool Board::sameColor(Position a, Position b) const {
     return colorAt(a) == colorAt(b);
 }

@@ -31,6 +31,7 @@ private:
     std::optional<Position> selected_;
     long long clockMs_ = 0;
     std::vector<PendingMove> activeMoves_;
+    bool gameOver_ = false;
 };
 
 }  // namespace kfc::logic

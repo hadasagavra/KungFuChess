@@ -36,6 +36,8 @@ bool Game::isPieceInTransitAt(Position p) const {
 }
 
 void Game::handleClickCell(Position p) {
+    if (gameOver_) return;
+
     applyArrivedMoves();
 
     if (!board_.inBounds(p)) return;
@@ -80,7 +82,7 @@ bool Game::canLand(Position from, Position to) const {
 
 void Game::applyArrivedMoves() {
     bool changed = true;
-    while (changed) {
+    while (changed && !gameOver_) {
         changed = false;
         for (auto it = activeMoves_.begin(); it != activeMoves_.end(); ++it) {
             if (it->arrivalMs > clockMs_) continue;
@@ -90,6 +92,7 @@ void Game::applyArrivedMoves() {
             activeMoves_.erase(it);
 
             if (canLand(from, to)) {
+                if (board_.isKing(to)) gameOver_ = true;
                 board_.movePiece(from, to);
             }
 
