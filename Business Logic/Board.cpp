@@ -2,7 +2,13 @@
 
 #include <utility>
 
+#include "PieceTypes.h"
+
 namespace kfc::logic {
+
+bool operator==(Position a, Position b) {
+    return a.row == b.row && a.col == b.col;
+}
 
 Board::Board(std::vector<Row> rows) : rows_(std::move(rows)) {}
 
@@ -12,6 +18,31 @@ int Board::height() const {
 
 int Board::width() const {
     return rows_.empty() ? 0 : static_cast<int>(rows_.front().size());
+}
+
+bool Board::inBounds(Position p) const {
+    return p.row >= 0 && p.row < height() && p.col >= 0 && p.col < width();
+}
+
+const std::string& Board::at(Position p) const {
+    return rows_[p.row][p.col];
+}
+
+bool Board::isEmpty(Position p) const {
+    return at(p) == kEmptyCellToken;
+}
+
+char Board::colorAt(Position p) const {
+    return at(p)[0];
+}
+
+bool Board::sameColor(Position a, Position b) const {
+    return colorAt(a) == colorAt(b);
+}
+
+void Board::movePiece(Position from, Position to) {
+    rows_[to.row][to.col] = rows_[from.row][from.col];
+    rows_[from.row][from.col] = kEmptyCellToken;
 }
 
 void Board::print(std::ostream& out) const {
