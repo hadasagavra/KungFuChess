@@ -29,60 +29,73 @@ const Board& Game::board() const {
 }
 
 bool Game::isPieceInTransitAt(Position p) const {
-    return pending_.has_value() && pending_->from == p;
-}
-
-bool Game::hasPieceInTransit() const {
-    return pending_.has_value();
+    for (const PendingMove& move : activeMoves_) {
+        if (move.from == p) return true;
+    }
+    return false;
 }
 
 void Game::handleClickCell(Position p) {
+    applyArrivedMoves();
+
     if (!board_.inBounds(p)) return;
+    if (isPieceInTransitAt(p)) return;
 
-    if (!selected_.has_value()) {
-        trySelect(p);
-        return;
-    }
-
-    if (tryReselectSameColor(p)) return;
-
-    tryRequestMove(p);
-}
-
-void Game::trySelect(Position p) {
-    if (!board_.isEmpty(p) && !isPieceInTransitAt(p)) {
-        selected_ = p;
+    if (!board_.isEmpty(p)) {
+        if (selected_.has_value() && !board_.sameColor(*selected_, p)) {
+            tryRequestMove(p);
+        } else {
+            selected_ = p;
+        }
+    } else if (selected_.has_value()) {
+        tryRequestMove(p);
     }
 }
 
-bool Game::tryReselectSameColor(Position p) {
-    if (board_.isEmpty(p) || isPieceInTransitAt(p) || !board_.sameColor(*selected_, p)) {
-        return false;
-    }
-    selected_ = p;
-    return true;
-}
-
-void Game::tryRequestMove(Position p) {
-    if (hasPieceInTransit()) return;
-
+void Game::tryRequestMove(Position to) {
     PieceType piece = board_.pieceTypeAt(*selected_);
     char color = board_.colorAt(*selected_);
-    if (!isMoveLegal(board_, piece, color, *selected_, p)) return;
+    if (!isMoveLegal(board_, piece, color, *selected_, to)) return;
 
-    pending_ = PendingMove{*selected_, p, clockMs_ + travelDurationMs(*selected_, p)};
+    activeMoves_.push_back(PendingMove{*selected_, to, clockMs_ + travelDurationMs(*selected_, to)});
     selected_.reset();
 }
 
 void Game::advanceClock(long long ms) {
     clockMs_ += ms;
-    applyArrivedMove();
+    applyArrivedMoves();
 }
 
-void Game::applyArrivedMove() {
-    if (pending_.has_value() && pending_->arrivalMs <= clockMs_) {
-        board_.movePiece(pending_->from, pending_->to);
-        pending_.reset();
+bool Game::canLand(Position from, Position to) const {
+    if (board_.isEmpty(from)) return false;
+
+    PieceType piece = board_.pieceTypeAt(from);
+    char color = board_.colorAt(from);
+    if (!isMoveLegal(board_, piece, color, from, to)) return false;
+
+    if (!board_.isEmpty(to) && board_.colorAt(to) == color) return false;
+
+    return true;
+}
+
+void Game::applyArrivedMoves() {
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (auto it = activeMoves_.begin(); it != activeMoves_.end(); ++it) {
+            if (it->arrivalMs > clockMs_) continue;
+
+            Position from = it->from;
+            Position to = it->to;
+            activeMoves_.erase(it);
+
+            if (canLand(from, to)) {
+                board_.movePiece(from, to);
+            }
+
+            changed = true;
+            break;
+        }
     }
 }
 

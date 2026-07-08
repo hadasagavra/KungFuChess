@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <vector>
 
 #include "Board.h"
 
@@ -22,16 +23,14 @@ public:
 
 private:
     bool isPieceInTransitAt(Position p) const;
-    bool hasPieceInTransit() const;
-    void trySelect(Position p);
-    bool tryReselectSameColor(Position p);
-    void tryRequestMove(Position p);
-    void applyArrivedMove();
+    void tryRequestMove(Position to);
+    void applyArrivedMoves();
+    bool canLand(Position from, Position to) const;
 
     Board board_;
     std::optional<Position> selected_;
     long long clockMs_ = 0;
-    std::optional<PendingMove> pending_;
+    std::vector<PendingMove> activeMoves_;
 };
 
 }  // namespace kfc::logic
