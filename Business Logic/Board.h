@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "PieceTypes.h"
+
 namespace kfc::logic {
 
 using Row = std::vector<std::string>;
@@ -25,6 +27,7 @@ public:
     bool inBounds(Position p) const;
     bool isEmpty(Position p) const;
     char colorAt(Position p) const;
+    PieceType pieceTypeAt(Position p) const;
     bool sameColor(Position a, Position b) const;
 
     void movePiece(Position from, Position to);
@@ -36,4 +39,4 @@ private:
     std::vector<Row> rows_;
 };
 
-}  // namespace kfc::logicgi
+}  // namespace kfc::logic

@@ -4,6 +4,8 @@
 #include <cstdlib>
 #include <utility>
 
+#include "Moverules.h"
+
 namespace kfc::logic {
 
 namespace {
@@ -63,6 +65,11 @@ bool Game::tryReselectSameColor(Position p) {
 
 void Game::tryRequestMove(Position p) {
     if (hasPieceInTransit()) return;
+
+    PieceType piece = board_.pieceTypeAt(*selected_);
+    char color = board_.colorAt(*selected_);
+    if (!isMoveLegal(piece, color, *selected_, p)) return;
+
     pending_ = PendingMove{*selected_, p, clockMs_ + travelDurationMs(*selected_, p)};
     selected_.reset();
 }

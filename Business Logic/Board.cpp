@@ -2,8 +2,6 @@
 
 #include <utility>
 
-#include "PieceTypes.h"
-
 namespace kfc::logic {
 
 bool operator==(Position a, Position b) {
@@ -34,6 +32,10 @@ bool Board::isEmpty(Position p) const {
 
 char Board::colorAt(Position p) const {
     return at(p)[0];
+}
+
+PieceType Board::pieceTypeAt(Position p) const {
+    return *charToPieceType(at(p)[1]);
 }
 
 bool Board::sameColor(Position a, Position b) const {
