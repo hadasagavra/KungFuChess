@@ -12,5 +12,6 @@ constexpr const char* kEmptyCellToken = ".";
 
 bool isValidColor(char c);
 std::optional<PieceType> charToPieceType(char c);
+char pieceTypeToChar(PieceType type);
 
 }  // namespace kfc::logic

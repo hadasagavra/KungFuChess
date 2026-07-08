@@ -32,6 +32,7 @@ public:
     bool sameColor(Position a, Position b) const;
 
     void movePiece(Position from, Position to);
+    void setPieceType(Position p, PieceType type);
     void print(std::ostream& out) const;
 
 private:

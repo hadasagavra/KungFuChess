@@ -18,4 +18,16 @@ std::optional<PieceType> charToPieceType(char c) {
     }
 }
 
+char pieceTypeToChar(PieceType type) {
+    switch (type) {
+        case PieceType::King:   return 'K';
+        case PieceType::Queen:  return 'Q';
+        case PieceType::Rook:   return 'R';
+        case PieceType::Bishop: return 'B';
+        case PieceType::Knight: return 'N';
+        case PieceType::Pawn:   return 'P';
+    }
+    return '?';
+}
+
 }  // namespace kfc::logic

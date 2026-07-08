@@ -80,6 +80,17 @@ bool Game::canLand(Position from, Position to) const {
     return true;
 }
 
+void Game::promoteIfNeeded(Position p) {
+    if (board_.isEmpty(p)) return;
+    if (board_.pieceTypeAt(p) != PieceType::Pawn) return;
+
+    char color = board_.colorAt(p);
+    int lastRow = (color == kWhiteColor) ? 0 : board_.height() - 1;
+    if (p.row == lastRow) {
+        board_.setPieceType(p, PieceType::Queen);
+    }
+}
+
 void Game::applyArrivedMoves() {
     bool changed = true;
     while (changed && !gameOver_) {
@@ -94,6 +105,7 @@ void Game::applyArrivedMoves() {
             if (canLand(from, to)) {
                 if (board_.isKing(to)) gameOver_ = true;
                 board_.movePiece(from, to);
+                promoteIfNeeded(to);
             }
 
             changed = true;

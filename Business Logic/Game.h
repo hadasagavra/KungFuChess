@@ -26,6 +26,7 @@ private:
     void tryRequestMove(Position to);
     void applyArrivedMoves();
     bool canLand(Position from, Position to) const;
+    void promoteIfNeeded(Position p);
 
     Board board_;
     std::optional<Position> selected_;

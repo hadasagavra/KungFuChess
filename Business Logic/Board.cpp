@@ -51,6 +51,10 @@ void Board::movePiece(Position from, Position to) {
     rows_[from.row][from.col] = kEmptyCellToken;
 }
 
+void Board::setPieceType(Position p, PieceType type) {
+    rows_[p.row][p.col][1] = pieceTypeToChar(type);
+}
+
 void Board::print(std::ostream& out) const {
     for (const auto& row : rows_) {
         for (size_t col = 0; col < row.size(); ++col) {
