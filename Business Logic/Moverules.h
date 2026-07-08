@@ -5,6 +5,6 @@
 
 namespace kfc::logic {
 
-bool isMoveLegal(PieceType piece, char color, Position from, Position to);
+bool isMoveLegal(const Board& board, PieceType piece, char color, Position from, Position to);
 
 }  // namespace kfc::logic

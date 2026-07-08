@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <utility>
 
-#include "Moverules.h"
+#include "MoveRules.h"
 
 namespace kfc::logic {
 
@@ -68,7 +68,7 @@ void Game::tryRequestMove(Position p) {
 
     PieceType piece = board_.pieceTypeAt(*selected_);
     char color = board_.colorAt(*selected_);
-    if (!isMoveLegal(piece, color, *selected_, p)) return;
+    if (!isMoveLegal(board_, piece, color, *selected_, p)) return;
 
     pending_ = PendingMove{*selected_, p, clockMs_ + travelDurationMs(*selected_, p)};
     selected_.reset();

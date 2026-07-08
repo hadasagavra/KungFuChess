@@ -1,11 +1,12 @@
-
-#include "Moverules.h"
+#include "MoveRules.h"
 
 #include <cstdlib>
 
 namespace kfc::logic {
 
-bool isMoveLegal(PieceType piece, char color, Position from, Position to) {
+namespace {
+
+bool isShapeLegal(PieceType piece, char color, Position from, Position to) {
     int dr = to.row - from.row;
     int dc = to.col - from.col;
     if (dr == 0 && dc == 0) return false;
@@ -26,6 +27,33 @@ bool isMoveLegal(PieceType piece, char color, Position from, Position to) {
         }
     }
     return false;
+}
+
+bool requiresClearPath(PieceType piece) {
+    return piece == PieceType::Rook || piece == PieceType::Bishop || piece == PieceType::Queen;
+}
+
+bool isPathClear(const Board& board, Position from, Position to) {
+    int dr = to.row - from.row;
+    int dc = to.col - from.col;
+    int stepR = (dr > 0) - (dr < 0);
+    int stepC = (dc > 0) - (dc < 0);
+
+    Position cur{from.row + stepR, from.col + stepC};
+    while (cur.row != to.row || cur.col != to.col) {
+        if (!board.isEmpty(cur)) return false;
+        cur.row += stepR;
+        cur.col += stepC;
+    }
+    return true;
+}
+
+}  // namespace
+
+bool isMoveLegal(const Board& board, PieceType piece, char color, Position from, Position to) {
+    if (!isShapeLegal(piece, color, from, to)) return false;
+    if (requiresClearPath(piece) && !isPathClear(board, from, to)) return false;
+    return true;
 }
 
 }  // namespace kfc::logic
