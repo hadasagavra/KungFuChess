@@ -48,11 +48,20 @@ bool isPathClear(const Board& board, Position from, Position to) {
     return true;
 }
 
+bool isPawnMoveLegal(const Board& board, Position from, Position to) {
+    bool isDiagonal = (to.col != from.col);
+    if (isDiagonal) {
+        return !board.isEmpty(to);
+    }
+    return board.isEmpty(to);
+}
+
 }  // namespace
 
 bool isMoveLegal(const Board& board, PieceType piece, char color, Position from, Position to) {
     if (!isShapeLegal(piece, color, from, to)) return false;
     if (requiresClearPath(piece) && !isPathClear(board, from, to)) return false;
+    if (piece == PieceType::Pawn && !isPawnMoveLegal(board, from, to)) return false;
     return true;
 }
 
