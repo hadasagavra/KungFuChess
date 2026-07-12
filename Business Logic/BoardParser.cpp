@@ -1,9 +1,9 @@
-#include "BoardParser.h"
+#include "BoardParser.hpp"
 
 #include <sstream>
 #include <utility>
 
-#include "PieceTypes.h"
+#include "PieceTypes.hpp"
 
 namespace kfc::logic {
 

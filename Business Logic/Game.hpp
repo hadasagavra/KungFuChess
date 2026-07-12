@@ -3,7 +3,7 @@
 #include <optional>
 #include <vector>
 
-#include "Board.h"
+#include "Board.hpp"
 
 namespace kfc::logic {
 

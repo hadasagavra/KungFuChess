@@ -1,10 +1,9 @@
-#include "Game.h"
-
+#include "Game.hpp"
+#include "MoveRules.hpp"
 #include <algorithm>
 #include <cstdlib>
 #include <utility>
 
-#include "MoveRules.h"
 
 namespace kfc::logic {
 

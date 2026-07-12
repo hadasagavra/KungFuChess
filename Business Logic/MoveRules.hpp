@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Board.h"
-#include "PieceTypes.h"
+#include "Board.hpp"
+#include "PieceTypes.hpp"
 
 namespace kfc::logic {
 

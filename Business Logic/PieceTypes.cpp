@@ -1,4 +1,4 @@
-#include "PieceTypes.h"
+#include "PieceTypes.hpp"
 
 namespace kfc::logic {
 

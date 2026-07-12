@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "PieceTypes.h"
+#include "PieceTypes.hpp"
 
 namespace kfc::logic {
 

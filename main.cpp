@@ -8,8 +8,8 @@
 #include <io.h>
 #endif
 
-#include "BoardParser.h"
-#include "Game.h"
+#include "BoardParser.hpp"
+#include "Game.hpp"
 
 namespace {
 
