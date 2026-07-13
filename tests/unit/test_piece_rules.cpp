@@ -224,20 +224,21 @@ TEST_CASE("KingRules moves one square in any direction") {
 }
 
 TEST_CASE("PawnRules moves forward and captures diagonally") {
-    SUBCASE("white advances one square on an empty board") {
+    SUBCASE("white advances one square upward on an empty board") {
         Board board{8, 8};
-        auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{1, 4});
+        auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{4, 4});
 
         const auto dests = PawnRules{}.legalDestinations(board, *pawn);
 
         CHECK(dests.size() == 1);
-        CHECK(contains(dests, Position{2, 4}));
-        CHECK_FALSE(contains(dests, Position{0, 4}));  // never backward
+        CHECK(contains(dests, Position{3, 4}));        // one square up (row - 1)
+        CHECK_FALSE(contains(dests, Position{5, 4}));  // never backward
+        CHECK_FALSE(contains(dests, Position{2, 4}));  // never two squares
     }
     SUBCASE("forward is blocked by any piece") {
         Board board{8, 8};
-        auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{1, 4});
-        place(board, 2, Color::Black, Kind::Pawn, Position{2, 4});
+        auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{4, 4});
+        place(board, 2, Color::Black, Kind::Pawn, Position{3, 4});
 
         const auto dests = PawnRules{}.legalDestinations(board, *pawn);
 
@@ -246,35 +247,35 @@ TEST_CASE("PawnRules moves forward and captures diagonally") {
     SUBCASE("captures diagonally forward but not straight ahead") {
         Board board{8, 8};
         auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{4, 4});
-        place(board, 2, Color::Black, Kind::Pawn, Position{5, 3});
-        place(board, 3, Color::Black, Kind::Pawn, Position{5, 5});
+        place(board, 2, Color::Black, Kind::Pawn, Position{3, 3});
+        place(board, 3, Color::Black, Kind::Pawn, Position{3, 5});
 
         const auto dests = PawnRules{}.legalDestinations(board, *pawn);
 
         CHECK(dests.size() == 3);
-        CHECK(contains(dests, Position{5, 4}));  // forward (empty)
-        CHECK(contains(dests, Position{5, 3}));  // diagonal capture
-        CHECK(contains(dests, Position{5, 5}));  // diagonal capture
+        CHECK(contains(dests, Position{3, 4}));  // forward (empty)
+        CHECK(contains(dests, Position{3, 3}));  // diagonal capture
+        CHECK(contains(dests, Position{3, 5}));  // diagonal capture
     }
     SUBCASE("a friendly diagonal is not a capture") {
         Board board{8, 8};
         auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{4, 4});
-        place(board, 2, Color::White, Kind::Pawn, Position{5, 3});
+        place(board, 2, Color::White, Kind::Pawn, Position{3, 3});
 
         const auto dests = PawnRules{}.legalDestinations(board, *pawn);
 
-        CHECK_FALSE(contains(dests, Position{5, 3}));
-        CHECK(contains(dests, Position{5, 4}));  // forward still available
+        CHECK_FALSE(contains(dests, Position{3, 3}));
+        CHECK(contains(dests, Position{3, 4}));  // forward still available
     }
-    SUBCASE("black advances toward decreasing rows and captures diagonally") {
+    SUBCASE("black advances one square downward and captures diagonally") {
         Board board{8, 8};
-        auto pawn = place(board, 1, Color::Black, Kind::Pawn, Position{6, 4});
+        auto pawn = place(board, 1, Color::Black, Kind::Pawn, Position{4, 4});
         place(board, 2, Color::White, Kind::Pawn, Position{5, 3});
 
         const auto dests = PawnRules{}.legalDestinations(board, *pawn);
 
-        CHECK(contains(dests, Position{5, 4}));         // forward (-row)
-        CHECK_FALSE(contains(dests, Position{7, 4}));   // never toward +row
+        CHECK(contains(dests, Position{5, 4}));         // one square down (row + 1)
+        CHECK_FALSE(contains(dests, Position{3, 4}));   // never backward (upward)
         CHECK(contains(dests, Position{5, 3}));         // diagonal capture
     }
 }

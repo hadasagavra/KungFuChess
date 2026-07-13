@@ -118,7 +118,7 @@ TEST_CASE("validateMove dispatches to the correct rule per Kind") {
     CHECK(okMove(Kind::Bishop, Position{4, 4}, Position{6, 6}).reason == "ok");
     CHECK(okMove(Kind::Queen, Position{4, 4}, Position{0, 0}).reason == "ok");
     CHECK(okMove(Kind::King, Position{4, 4}, Position{4, 5}).reason == "ok");
-    CHECK(okMove(Kind::Pawn, Position{1, 4}, Position{2, 4}).reason == "ok");
+    CHECK(okMove(Kind::Pawn, Position{1, 4}, Position{0, 4}).reason == "ok");
 }
 
 TEST_CASE("validateMove applies its checks in the specified order") {

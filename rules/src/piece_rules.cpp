@@ -22,13 +22,13 @@ struct Step {
     int dCol;
 };
 
-constexpr Step kOrthogonal[] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-constexpr Step kDiagonal[] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
-constexpr Step kAllDirections[] = {{1, 0},  {-1, 0}, {0, 1},  {0, -1},
+constexpr Step orthogonal[] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+constexpr Step diagonal[] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+constexpr Step allDirections[] = {{1, 0},  {-1, 0}, {0, 1},  {0, -1},
                                    {1, 1},  {1, -1}, {-1, 1}, {-1, -1}};
-constexpr Step kKnight[] = {{2, 1},  {2, -1},  {-2, 1},  {-2, -1},
+constexpr Step knight[] = {{2, 1},  {2, -1},  {-2, 1},  {-2, -1},
                             {1, 2},  {1, -2},  {-1, 2},  {-1, -2}};
-constexpr int kDiagonalColumns[] = {-1, 1};
+constexpr int diagonalColumns[] = {-1, 1};
 
 enum class Occupant { Empty, Friendly, Enemy, OffBoard };
 
@@ -93,37 +93,39 @@ std::set<Position> singleSteps(const Board& board, const Piece& piece,
     return destinations;
 }
 
-// Forward row direction for a pawn: White advances to increasing rows, Black to
-// decreasing rows (per board orientation).
+// Forward row direction for a pawn: White advances up the board (toward row 0),
+// Black advances down the board (toward higher row indices).
+constexpr int whiteForward = -1;
+constexpr int blackForward = 1;
 int forwardStep(Color color) {
-    return color == Color::White ? 1 : -1;
+    return color == Color::White ? whiteForward : blackForward;
 }
 
 }  // namespace
 
 std::set<Position> RookRules::legalDestinations(const Board& board,
                                                 const Piece& piece) const {
-    return slide(board, piece, kOrthogonal);
+    return slide(board, piece, orthogonal);
 }
 
 std::set<Position> BishopRules::legalDestinations(const Board& board,
                                                   const Piece& piece) const {
-    return slide(board, piece, kDiagonal);
+    return slide(board, piece, diagonal);
 }
 
 std::set<Position> QueenRules::legalDestinations(const Board& board,
                                                  const Piece& piece) const {
-    return slide(board, piece, kAllDirections);
+    return slide(board, piece, allDirections);
 }
 
 std::set<Position> KnightRules::legalDestinations(const Board& board,
                                                   const Piece& piece) const {
-    return singleSteps(board, piece, kKnight);
+    return singleSteps(board, piece, knight);
 }
 
 std::set<Position> KingRules::legalDestinations(const Board& board,
                                                 const Piece& piece) const {
-    return singleSteps(board, piece, kAllDirections);
+    return singleSteps(board, piece, allDirections);
 }
 
 std::set<Position> PawnRules::legalDestinations(const Board& board,
@@ -139,7 +141,7 @@ std::set<Position> PawnRules::legalDestinations(const Board& board,
     }
 
     // Diagonal captures: allowed only onto an enemy-occupied cell.
-    for (const int dCol : kDiagonalColumns) {
+    for (const int dCol : diagonalColumns) {
         const Position diagonal{from.row + dir, from.col + dCol};
         if (classify(board, piece, diagonal) == Occupant::Enemy) {
             destinations.insert(diagonal);
