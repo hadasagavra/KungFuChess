@@ -15,7 +15,7 @@
 // is reported as "ERROR <code>" rather than crashing.
 int main() {
     try {
-        kfc::io::ParsedScript parsed = kfc::io::parseScript(std::cin);
+        kfc::io::ParsedInput parsed = kfc::io::parseInput(std::cin);
 
         kfc::engine::GameEngine engine{parsed.board};
         kfc::input::BoardMapper mapper{parsed.board.width(), parsed.board.height()};
@@ -28,8 +28,8 @@ int main() {
                 runner.run(*command);
             }
         }
-    } catch (const kfc::io::BoardParseError& e) {
-        std::cout << "ERROR " << e.what() << "\n";
+    } catch (const kfc::io::ParseError& e) {
+        std::cout << "ERROR " << e.code << "\n";
         return 1;
     }
 

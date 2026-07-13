@@ -1,20 +1,36 @@
 #include "third_party/doctest/doctest.h"
 
 #include <sstream>
+#include <string>
 
 #include "io/include/board_parser.hpp"
 #include "model/include/board.hpp"
 #include "model/include/piece.hpp"
 #include "model/include/position.hpp"
 
-using kfc::io::BoardParseError;
-using kfc::io::ParsedScript;
-using kfc::io::parseScript;
+using kfc::io::ParsedInput;
+using kfc::io::ParseError;
+using kfc::io::parseInput;
 using kfc::model::Color;
 using kfc::model::Kind;
 using kfc::model::Position;
 
-TEST_CASE("parseScript reads the board and the command lines") {
+namespace {
+
+// Parse the input and return the ParseError code it throws, or "" on success.
+std::string errorCode(const std::string& input) {
+    std::istringstream in(input);
+    try {
+        parseInput(in);
+    } catch (const ParseError& e) {
+        return e.code;
+    }
+    return "";
+}
+
+}  // namespace
+
+TEST_CASE("parseInput reads the board and the command lines") {
     std::istringstream in(
         "Board:\n"
         "wK . .\n"
@@ -23,7 +39,7 @@ TEST_CASE("parseScript reads the board and the command lines") {
         "click 50 50\n"
         "wait 1000\n");
 
-    const ParsedScript parsed = parseScript(in);
+    const ParsedInput parsed = parseInput(in);
 
     CHECK(parsed.board.width() == 3);
     CHECK(parsed.board.height() == 2);
@@ -45,7 +61,7 @@ TEST_CASE("parseScript reads the board and the command lines") {
     CHECK(parsed.commands[1] == "wait 1000");
 }
 
-TEST_CASE("parseScript skips text before Board: and trims lines") {
+TEST_CASE("parseInput skips text before Board: and trims lines") {
     std::istringstream in(
         "# a header line\n"
         "\n"
@@ -53,7 +69,7 @@ TEST_CASE("parseScript skips text before Board: and trims lines") {
         "  wP  \n"
         "Commands:\n");
 
-    const ParsedScript parsed = parseScript(in);
+    const ParsedInput parsed = parseInput(in);
 
     CHECK(parsed.board.width() == 1);
     CHECK(parsed.board.height() == 1);
@@ -63,29 +79,23 @@ TEST_CASE("parseScript skips text before Board: and trims lines") {
     CHECK(parsed.commands.empty());
 }
 
-TEST_CASE("parseScript rejects rows of differing widths") {
-    std::istringstream in(
-        "Board:\n"
-        "wK . .\n"
-        ". bR\n"
-        "Commands:\n");
-
-    CHECK_THROWS_WITH_AS(parseScript(in), "row_width_mismatch", BoardParseError);
+TEST_CASE("parseInput rejects rows of differing widths") {
+    CHECK(errorCode(
+              "Board:\n"
+              "wK . .\n"
+              ". bR\n"
+              "Commands:\n") == "ROW_WIDTH_MISMATCH");
 }
 
-TEST_CASE("parseScript rejects an unknown piece token") {
-    std::istringstream in(
-        "Board:\n"
-        "wZ . .\n"
-        "Commands:\n");
-
-    CHECK_THROWS_WITH_AS(parseScript(in), "unknown_token", BoardParseError);
+TEST_CASE("parseInput rejects an unknown piece token") {
+    CHECK(errorCode(
+              "Board:\n"
+              "wZ . .\n"
+              "Commands:\n") == "UNKNOWN_TOKEN");
 }
 
-TEST_CASE("parseScript rejects an empty board") {
-    std::istringstream in(
-        "Board:\n"
-        "Commands:\n");
-
-    CHECK_THROWS_WITH_AS(parseScript(in), "empty_board", BoardParseError);
+TEST_CASE("parseInput rejects an empty board") {
+    CHECK(errorCode(
+              "Board:\n"
+              "Commands:\n") == "empty_board");
 }

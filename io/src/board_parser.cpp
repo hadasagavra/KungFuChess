@@ -15,18 +15,18 @@ namespace {
 
 constexpr const char* boardMarker = "Board:";
 constexpr const char* commandsMarker = "Commands:";
-constexpr const char* rowWidthMismatch = "row_width_mismatch";
-constexpr const char* unknownToken = "unknown_token";
+constexpr const char* rowWidthMismatch = "ROW_WIDTH_MISMATCH";
+constexpr const char* unknownToken = "UNKNOWN_TOKEN";
 constexpr const char* emptyBoard = "empty_board";
 
-void advanceToBoardSection(std::istream& in) {
+void skipToBoardSection(std::istream& in) {
     std::string line;
     while (std::getline(in, line)) {
         if (trim(line) == boardMarker) return;
     }
 }
 
-std::vector<std::string> readGridRows(std::istream& in) {
+std::vector<std::string> readBoardRows(std::istream& in) {
     std::vector<std::string> rows;
     std::string line;
     while (std::getline(in, line)) {
@@ -47,9 +47,9 @@ std::vector<std::string> readCommandLines(std::istream& in) {
     return commands;
 }
 
-model::Board assembleBoard(const std::vector<std::string>& rows) {
+model::Board buildBoard(const std::vector<std::string>& rows) {
     if (rows.empty()) {
-        throw BoardParseError{emptyBoard};
+        throw ParseError{emptyBoard};
     }
 
     std::vector<std::vector<std::string>> grid;
@@ -61,11 +61,11 @@ model::Board assembleBoard(const std::vector<std::string>& rows) {
     const int height = static_cast<int>(grid.size());
     const int width = static_cast<int>(grid.front().size());
     if (width == 0) {
-        throw BoardParseError{emptyBoard};
+        throw ParseError{emptyBoard};
     }
     for (const std::vector<std::string>& cells : grid) {
         if (static_cast<int>(cells.size()) != width) {
-            throw BoardParseError{rowWidthMismatch};
+            throw ParseError{rowWidthMismatch};
         }
     }
 
@@ -79,7 +79,7 @@ model::Board assembleBoard(const std::vector<std::string>& rows) {
             }
             const std::optional<PieceCode> code = pieceFromToken(token);
             if (!code) {
-                throw BoardParseError{unknownToken};
+                throw ParseError{unknownToken};
             }
             board.addPiece(std::make_shared<model::Piece>(
                 nextId++, code->color, code->kind, model::Position{row, col}));
@@ -90,11 +90,11 @@ model::Board assembleBoard(const std::vector<std::string>& rows) {
 
 }  // namespace
 
-ParsedScript parseScript(std::istream& in) {
-    advanceToBoardSection(in);
-    const std::vector<std::string> rows = readGridRows(in);
+ParsedInput parseInput(std::istream& in) {
+    skipToBoardSection(in);
+    const std::vector<std::string> rows = readBoardRows(in);
     std::vector<std::string> commands = readCommandLines(in);
-    return ParsedScript{assembleBoard(rows), std::move(commands)};
+    return ParsedInput{buildBoard(rows), std::move(commands)};
 }
 
 }  // namespace kfc::io
