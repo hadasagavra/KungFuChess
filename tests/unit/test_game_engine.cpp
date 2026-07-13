@@ -34,7 +34,7 @@ TEST_CASE("requestMove accepts a legal move") {
     place(board, 1, Color::White, Kind::Rook, Position{4, 4});
     GameEngine engine{board};
 
-    const MoveResult result = engine.requestMove(1, Position{4, 4}, Position{4, 5});
+    const MoveResult result = engine.requestMove(Position{4, 4}, Position{4, 5});
 
     CHECK(result.isAccepted);
     CHECK(result.reason == "ok");
@@ -46,9 +46,9 @@ TEST_CASE("requestMove rejects a second move while one is in progress") {
     place(board, 2, Color::White, Kind::Rook, Position{0, 0});
     GameEngine engine{board};
 
-    REQUIRE(engine.requestMove(1, Position{4, 4}, Position{4, 5}).isAccepted);
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
 
-    const MoveResult result = engine.requestMove(2, Position{0, 0}, Position{0, 1});
+    const MoveResult result = engine.requestMove(Position{0, 0}, Position{0, 1});
     CHECK_FALSE(result.isAccepted);
     CHECK(result.reason == "motion_in_progress");
 }
@@ -59,12 +59,12 @@ TEST_CASE("requestMove forwards the RuleEngine rejection reason") {
     GameEngine engine{board};
 
     SUBCASE("illegal geometry") {
-        const MoveResult result = engine.requestMove(1, Position{4, 4}, Position{5, 5});
+        const MoveResult result = engine.requestMove(Position{4, 4}, Position{5, 5});
         CHECK_FALSE(result.isAccepted);
         CHECK(result.reason == "illegal_piece_move");
     }
     SUBCASE("empty source") {
-        const MoveResult result = engine.requestMove(9, Position{2, 2}, Position{2, 3});
+        const MoveResult result = engine.requestMove(Position{2, 2}, Position{2, 3});
         CHECK_FALSE(result.isAccepted);
         CHECK(result.reason == "empty_source");
     }
@@ -74,14 +74,14 @@ TEST_CASE("wait advances motion and only moves the piece on arrival") {
     Board board{8, 8};
     auto rook = place(board, 1, Color::White, Kind::Rook, Position{4, 4});
     GameEngine engine{board};
-    REQUIRE(engine.requestMove(1, Position{4, 4}, Position{4, 5}).isAccepted);
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
 
     SUBCASE("sub-threshold: piece still on source, motion still active") {
         engine.wait(999);
         const GameSnapshot snap = engine.getSnapshot();
         CHECK(snap.pieceAt(Position{4, 4}).has_value());
         CHECK_FALSE(snap.pieceAt(Position{4, 5}).has_value());
-        CHECK(engine.requestMove(1, Position{4, 4}, Position{4, 5}).reason ==
+        CHECK(engine.requestMove(Position{4, 4}, Position{4, 5}).reason ==
               "motion_in_progress");
     }
     SUBCASE("at threshold: piece arrives and a new move is accepted") {
@@ -90,7 +90,7 @@ TEST_CASE("wait advances motion and only moves the piece on arrival") {
         CHECK_FALSE(snap.pieceAt(Position{4, 4}).has_value());
         CHECK(snap.pieceAt(Position{4, 5}).has_value());
         CHECK(rook->getCell() == Position{4, 5});
-        CHECK(engine.requestMove(1, Position{4, 5}, Position{4, 6}).isAccepted);
+        CHECK(engine.requestMove(Position{4, 5}, Position{4, 6}).isAccepted);
     }
 }
 
@@ -100,13 +100,13 @@ TEST_CASE("capturing the king ends the game") {
     place(board, 2, Color::Black, Kind::King, Position{4, 6});
     GameEngine engine{board};
 
-    REQUIRE(engine.requestMove(1, Position{4, 4}, Position{4, 6}).isAccepted);
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
     engine.wait(2000);
 
     CHECK(engine.isGameOver());
     CHECK(engine.getSnapshot().isOver());
 
-    const MoveResult afterOver = engine.requestMove(1, Position{4, 6}, Position{4, 7});
+    const MoveResult afterOver = engine.requestMove(Position{4, 6}, Position{4, 7});
     CHECK_FALSE(afterOver.isAccepted);
     CHECK(afterOver.reason == "game_over");
 }
@@ -117,12 +117,12 @@ TEST_CASE("a non-king capture does not end the game") {
     place(board, 2, Color::Black, Kind::Pawn, Position{4, 6});
     GameEngine engine{board};
 
-    REQUIRE(engine.requestMove(1, Position{4, 4}, Position{4, 6}).isAccepted);
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
     engine.wait(2000);
 
     CHECK_FALSE(engine.isGameOver());
     CHECK_FALSE(engine.getSnapshot().isOver());
-    CHECK(engine.requestMove(1, Position{4, 6}, Position{4, 7}).isAccepted);
+    CHECK(engine.requestMove(Position{4, 6}, Position{4, 7}).isAccepted);
 }
 
 TEST_CASE("getSnapshot reflects the current logical state") {

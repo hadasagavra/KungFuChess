@@ -16,9 +16,9 @@ using model::Position;
 
 namespace {
 
-constexpr const char* ReasonOk = "ok";
-constexpr const char* ReasonGameOver = "game_over";
-constexpr const char* ReasonMotionInProgress = "motion_in_progress";
+constexpr const char* reasonOk = "ok";
+constexpr const char* reasonGameOver = "game_over";
+constexpr const char* reasonMotionInProgress = "motion_in_progress";
 
 }  // namespace
 
@@ -35,13 +35,12 @@ std::optional<Piece> GameSnapshot::pieceAt(Position cell) const {
 
 GameEngine::GameEngine(Board& board) : board_(board), arbiter_(board_) {}
 
-MoveResult GameEngine::requestMove(std::uint32_t pieceId, Position source,
-                                   Position destination) {
+MoveResult GameEngine::requestMove(Position source, Position destination) {
     if (gameState_.isOver()) {
-        return {false, ReasonGameOver};
+        return {false, reasonGameOver};
     }
     if (arbiter_.hasActiveMotion()) {
-        return {false, ReasonMotionInProgress};
+        return {false, reasonMotionInProgress};
     }
 
     const rules::MoveValidation validation =
@@ -50,8 +49,11 @@ MoveResult GameEngine::requestMove(std::uint32_t pieceId, Position source,
         return {false, validation.reason};
     }
 
-    arbiter_.startMotion(pieceId, source, destination);
-    return {true, ReasonOk};
+    // Validation confirmed the source is non-empty, so derive the piece id from
+    // the board rather than trusting a caller-supplied id.
+    const std::shared_ptr<Piece> piece = board_.getPieceAt(source);
+    arbiter_.startMotion(piece->getId(), source, destination);
+    return {true, reasonOk};
 }
 
 void GameEngine::wait(int ms) {

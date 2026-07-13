@@ -18,7 +18,7 @@ using model::State;
 
 namespace {
 
-constexpr int MsPerCell = 1000;
+constexpr int msPerCell = 1000;
 
 }  // namespace
 
@@ -30,7 +30,7 @@ int RealTimeArbiter::computeDurationMs(Position source, Position destination) {
     if (dRow < 0) dRow = -dRow;
     if (dCol < 0) dCol = -dCol;
     const int cells = dRow > dCol ? dRow : dCol;  // Chebyshev: cell-step count
-    return cells * MsPerCell;
+    return cells * msPerCell;
 }
 
 bool RealTimeArbiter::hasMotionForPiece(std::uint32_t pieceId) const {

@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -50,8 +49,7 @@ class GameEngine {
 public:
     explicit GameEngine(model::Board& board);
 
-    MoveResult requestMove(std::uint32_t pieceId, model::Position source,
-                           model::Position destination);
+    MoveResult requestMove(model::Position source, model::Position destination);
     void wait(int ms);
     GameSnapshot getSnapshot() const;
     bool isGameOver() const;

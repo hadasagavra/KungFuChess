@@ -18,11 +18,11 @@ using model::Position;
 
 namespace {
 
-constexpr const char* ReasonOk = "ok";
-constexpr const char* ReasonOutsideBoard = "outside_board";
-constexpr const char* ReasonEmptySource = "empty_source";
-constexpr const char* ReasonFriendlyDestination = "friendly_destination";
-constexpr const char* ReasonIllegalPieceMove = "illegal_piece_move";
+constexpr const char* reasonOk = "ok";
+constexpr const char* reasonOutsideBoard = "outside_board";
+constexpr const char* reasonEmptySource = "empty_source";
+constexpr const char* reasonFriendlyDestination = "friendly_destination";
+constexpr const char* reasonIllegalPieceMove = "illegal_piece_move";
 
 }  // namespace
 
@@ -48,26 +48,26 @@ const PieceRules& ruleFor(Kind kind) {
 MoveValidation RuleEngine::validateMove(const Board& board, Position source,
                                         Position destination) const {
     if (!board.isInsideBounds(source) || !board.isInsideBounds(destination)) {
-        return {false, ReasonOutsideBoard};
+        return {false, reasonOutsideBoard};
     }
 
     const std::shared_ptr<Piece> mover = board.getPieceAt(source);
     if (!mover) {
-        return {false, ReasonEmptySource};
+        return {false, reasonEmptySource};
     }
 
     const std::shared_ptr<Piece> target = board.getPieceAt(destination);
     if (target && target->getColor() == mover->getColor()) {
-        return {false, ReasonFriendlyDestination};
+        return {false, reasonFriendlyDestination};
     }
 
     const std::set<Position> destinations =
         ruleFor(mover->getKind()).legalDestinations(board, *mover);
     if (destinations.count(destination) == 0) {
-        return {false, ReasonIllegalPieceMove};
+        return {false, reasonIllegalPieceMove};
     }
 
-    return {true, ReasonOk};
+    return {true, reasonOk};
 }
 
 }  // namespace kfc::rules

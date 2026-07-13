@@ -6,7 +6,7 @@
 
 namespace kfc::input {
 
-inline constexpr int kCellSize = 100;
+inline constexpr int cellSize = 100;
 
 class BoardMapper {
 public:
