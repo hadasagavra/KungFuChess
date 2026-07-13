@@ -1,60 +1,36 @@
 #include <iostream>
-#include <sstream>
+#include <optional>
 #include <string>
-#include <vector>
 
-#ifdef _WIN32
-#include <fcntl.h>
-#include <io.h>
-#endif
+#include "engine/include/game_engine.hpp"
+#include "input/include/board_mapper.hpp"
+#include "input/include/controller.hpp"
+#include "io/include/board_parser.hpp"
+#include "texttests/include/script_parser.hpp"
+#include "texttests/include/script_runner.hpp"
 
-#include "BoardParser.hpp"
-#include "Game.hpp"
-
-namespace {
-
-kfc::logic::Position pixelToCell(int x, int y) {
-    return kfc::logic::Position{y / 100, x / 100};
-}
-
-std::vector<std::string> splitWords(const std::string& line) {
-    std::vector<std::string> words;
-    std::istringstream iss(line);
-    std::string word;
-    while (iss >> word) words.push_back(word);
-    return words;
-}
-
-}  // namespace
-
+// Composition root: wire io -> engine -> input -> texttests and replay the
+// parsed commands. The GameEngine BORROWS the board, so `parsed` (which owns it)
+// must outlive the engine -- both live here for the whole run. Malformed input
+// is reported as "ERROR <code>" rather than crashing.
 int main() {
-#ifdef _WIN32
-    _setmode(_fileno(stdout), _O_BINARY);
-#endif
-
-    kfc::logic::BoardParser parser;
-    std::vector<std::string> commands;
-
     try {
-        kfc::logic::Board board = parser.parse(std::cin, commands);
-        kfc::logic::Game game(std::move(board));
+        kfc::io::ParsedScript parsed = kfc::io::parseScript(std::cin);
 
-        for (const auto& command : commands) {
-            std::vector<std::string> words = splitWords(command);
-            if (words.empty()) continue;
+        kfc::engine::GameEngine engine{parsed.board};
+        kfc::input::BoardMapper mapper{parsed.board.width(), parsed.board.height()};
+        kfc::input::Controller controller{engine, mapper};
+        kfc::texttests::ScriptRunner runner{controller, engine, std::cout};
 
-            if (words[0] == "click" && words.size() == 3) {
-                int x = std::stoi(words[1]);
-                int y = std::stoi(words[2]);
-                game.handleClickCell(pixelToCell(x, y));
-            } else if (words[0] == "wait" && words.size() == 2) {
-                game.advanceClock(std::stoll(words[1]));
-            } else if (command == "print board") {
-                game.board().print(std::cout);
+        for (const std::string& line : parsed.commands) {
+            if (std::optional<kfc::texttests::Command> command =
+                    kfc::texttests::parseCommand(line)) {
+                runner.run(*command);
             }
         }
-    } catch (const kfc::logic::ParseError& e) {
-        std::cout << "ERROR " << e.code << "\n";
+    } catch (const kfc::io::BoardParseError& e) {
+        std::cout << "ERROR " << e.what() << "\n";
+        return 1;
     }
 
     return 0;
