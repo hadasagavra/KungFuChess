@@ -36,6 +36,8 @@ std::ostream& operator<<(std::ostream& os, State s) {
     switch (s) {
         case State::Idle:     return os << "Idle";
         case State::Moving:   return os << "Moving";
+        case State::Airborne: return os << "Airborne";
+        case State::Resting:  return os << "Resting";
         case State::Captured: return os << "Captured";
     }
     return os << "State(?)";

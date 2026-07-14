@@ -17,7 +17,13 @@ struct WaitCommand {
 
 struct PrintBoardCommand {};
 
-using Command = std::variant<ClickCommand, WaitCommand, PrintBoardCommand>;
+struct JumpCommand {
+    int x;
+    int y;
+};
+
+
+using Command = std::variant<ClickCommand, WaitCommand,JumpCommand,PrintBoardCommand>;
 
 std::optional<Command> parseCommand(const std::string& line);
 

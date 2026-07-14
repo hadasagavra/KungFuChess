@@ -279,3 +279,56 @@ TEST_CASE("PawnRules moves forward and captures diagonally") {
         CHECK(contains(dests, Position{5, 3}));         // diagonal capture
     }
 }
+
+TEST_CASE("PawnRules allows a double step from the start row when the path is clear") {
+    SUBCASE("white double step from its start row (height - 2)") {
+        Board board{8, 8};
+        auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{6, 4});
+
+        const auto dests = PawnRules{}.legalDestinations(board, *pawn);
+
+        CHECK(dests.size() == 2);
+        CHECK(contains(dests, Position{5, 4}));        // single
+        CHECK(contains(dests, Position{4, 4}));        // double
+        CHECK_FALSE(contains(dests, Position{3, 4}));  // never a triple step
+    }
+    SUBCASE("black double step from its start row (1)") {
+        Board board{8, 8};
+        auto pawn = place(board, 1, Color::Black, Kind::Pawn, Position{1, 4});
+
+        const auto dests = PawnRules{}.legalDestinations(board, *pawn);
+
+        CHECK(dests.size() == 2);
+        CHECK(contains(dests, Position{2, 4}));
+        CHECK(contains(dests, Position{3, 4}));
+    }
+    SUBCASE("second square blocked: only the single step") {
+        Board board{8, 8};
+        auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{6, 4});
+        place(board, 2, Color::White, Kind::Pawn, Position{4, 4});  // blocks the double
+
+        const auto dests = PawnRules{}.legalDestinations(board, *pawn);
+
+        CHECK(dests.size() == 1);
+        CHECK(contains(dests, Position{5, 4}));
+        CHECK_FALSE(contains(dests, Position{4, 4}));
+    }
+    SUBCASE("first square blocked: no forward move at all") {
+        Board board{8, 8};
+        auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{6, 4});
+        place(board, 2, Color::White, Kind::Pawn, Position{5, 4});  // blocks the path
+
+        const auto dests = PawnRules{}.legalDestinations(board, *pawn);
+
+        CHECK(dests.empty());
+    }
+    SUBCASE("not on the start row: single step only") {
+        Board board{8, 8};
+        auto pawn = place(board, 1, Color::White, Kind::Pawn, Position{4, 4});
+
+        const auto dests = PawnRules{}.legalDestinations(board, *pawn);
+
+        CHECK(dests.size() == 1);
+        CHECK(contains(dests, Position{3, 4}));
+    }
+}

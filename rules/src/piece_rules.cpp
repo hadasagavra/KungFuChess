@@ -11,6 +11,7 @@ namespace kfc::rules {
 
 using model::Board;
 using model::Color;
+using model::Kind;
 using model::Piece;
 using model::Position;
 
@@ -97,8 +98,17 @@ std::set<Position> singleSteps(const Board& board, const Piece& piece,
 // Black advances down the board (toward higher row indices).
 constexpr int whiteForward = -1;
 constexpr int blackForward = 1;
+constexpr int blackStartRow = 1;
+constexpr int whiteStartOffset = 2;  // white pawns start on row height - 2
+constexpr int pawnDoubleStep = 2;
+
 int forwardStep(Color color) {
     return color == Color::White ? whiteForward : blackForward;
+}
+
+// The row a pawn of this color starts on (where a double step is allowed).
+int startRow(Color color, int height) {
+    return color == Color::White ? height - whiteStartOffset : blackStartRow;
 }
 
 }  // namespace
@@ -134,10 +144,17 @@ std::set<Position> PawnRules::legalDestinations(const Board& board,
     const Position from = piece.getCell();
     const int dir = forwardStep(piece.getColor());
 
-    // Forward one square: allowed only onto an empty cell (never a capture).
+    // Forward one square: allowed only onto an empty cell (never a capture). From
+    // the start row, a double step is allowed when both squares ahead are empty.
     const Position ahead{from.row + dir, from.col};
     if (classify(board, piece, ahead) == Occupant::Empty) {
         destinations.insert(ahead);
+        if (from.row == startRow(piece.getColor(), board.height())) {
+            const Position ahead2{from.row + pawnDoubleStep * dir, from.col};
+            if (classify(board, piece, ahead2) == Occupant::Empty) {
+                destinations.insert(ahead2);
+            }
+        }
     }
 
     // Diagonal captures: allowed only onto an enemy-occupied cell.
@@ -148,6 +165,17 @@ std::set<Position> PawnRules::legalDestinations(const Board& board,
         }
     }
     return destinations;
+}
+
+std::optional<Kind> promotedKind(const Board& board, const Piece& piece) {
+    if (piece.getKind() != Kind::Pawn) {
+        return std::nullopt;
+    }
+    const int promoteRow = forwardStep(piece.getColor()) < 0 ? 0 : board.height() - 1;
+    if (piece.getCell().row == promoteRow) {
+        return Kind::Queen;
+    }
+    return std::nullopt;
 }
 
 }  // namespace kfc::rules

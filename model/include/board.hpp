@@ -30,6 +30,9 @@ public:
     std::shared_ptr<Piece> getPieceAt(Position pos) const;
     void movePiece(Position from, Position to);
 
+    // Set the lifecycle state of the piece occupying a cell (used by the arbiter).
+    void setPieceState(Position pos, State state);
+
 private:
     int indexOf(Position pos) const;
     void ensureInsideBounds(Position pos) const;

@@ -1,7 +1,6 @@
 #include "realtime/include/real_time_arbiter.hpp"
 
 #include <memory>
-#include <stdexcept>
 
 #include "model/include/board.hpp"
 #include "model/include/piece.hpp"
@@ -10,96 +9,145 @@
 
 namespace kfc::realtime {
 
-using model::Board;
 using model::Kind;
 using model::Piece;
 using model::Position;
 using model::State;
 
-namespace {
+RealTimeArbiter::RealTimeArbiter(model::Board& board) : board_(board) {}
 
-constexpr int msPerCell = 1000;
-
-}  // namespace
-
-RealTimeArbiter::RealTimeArbiter(Board& board) : board_(board) {}
-
-int RealTimeArbiter::computeDurationMs(Position source, Position destination) {
-    int dRow = destination.row - source.row;
-    int dCol = destination.col - source.col;
-    if (dRow < 0) dRow = -dRow;
-    if (dCol < 0) dCol = -dCol;
-    const int cells = dRow > dCol ? dRow : dCol;  // Chebyshev: cell-step count
-    return cells * msPerCell;
+bool RealTimeArbiter::startMotion(Position from, Position to) {
+    if (hasActiveMotion()) {
+        return false;
+    }
+    active_.emplace_back(from, to);
+    board_.setPieceState(from, State::Moving);
+    return true;
 }
 
-bool RealTimeArbiter::hasMotionForPiece(std::uint32_t pieceId) const {
-    for (const Motion& motion : active_) {
-        if (motion.pieceId == pieceId) {
-            return true;
-        }
+bool RealTimeArbiter::startJump(Position cell) {
+    if (isAirborneAt(cell)) {
+        return false;
     }
-    return false;
+    airborne_.emplace_back(cell);
+    board_.setPieceState(cell, State::Airborne);
+    return true;
 }
 
-void RealTimeArbiter::startMotion(std::uint32_t pieceId, Position source,
-                                  Position destination) {
-    if (hasMotionForPiece(pieceId)) {
-        throw std::logic_error(
-            "RealTimeArbiter::startMotion: piece already has an active motion");
-    }
-
-    const std::shared_ptr<Piece> piece = board_.getPieceAt(source);
-    if (!piece || piece->getId() != pieceId) {
-        throw std::invalid_argument(
-            "RealTimeArbiter::startMotion: no such piece at source");
-    }
-
-    const int durationMs = computeDurationMs(source, destination);
-    piece->setState(State::Moving);
-    active_.push_back(Motion{pieceId, source, destination, 0, durationMs});
-}
-
-bool RealTimeArbiter::resolveArrival(const Motion& motion) {
-    const std::shared_ptr<Piece> mover = board_.getPieceAt(motion.source);
-
-    bool kingCaptured = false;
-    const std::shared_ptr<Piece> target = board_.getPieceAt(motion.destination);
-    if (target) {
-        target->setState(State::Captured);
-        kingCaptured = target->getKind() == Kind::King;
-        board_.removePiece(motion.destination);
-    }
-
-    // movePiece clears the source cell, places the mover at the destination, and
-    // syncs the piece's own cell (Board is the single source of truth).
-    board_.movePiece(motion.source, motion.destination);
-    mover->setState(State::Idle);
-    return kingCaptured;
-}
-
-ArbiterResult RealTimeArbiter::advanceTime(int ms) {
-    ArbiterResult result;
-
-    for (Motion& motion : active_) {
-        motion.elapsedMs += ms;
-    }
+std::vector<ArrivalReport> RealTimeArbiter::advance(int deltaMs) {
+    std::vector<ArrivalReport> reports;
+    tickCooldowns(deltaMs);
 
     for (auto it = active_.begin(); it != active_.end();) {
-        if (it->elapsedMs >= it->durationMs) {
-            if (resolveArrival(*it)) {
-                result.kingCaptured = true;
-            }
+        it->advance(deltaMs);
+        if (it->hasArrived()) {
+            reports.push_back(resolveArrival(*it));
             it = active_.erase(it);
         } else {
             ++it;
         }
     }
-    return result;
+
+    landAirborne(deltaMs, reports);
+    return reports;
 }
 
-bool RealTimeArbiter::hasActiveMotion() const {
-    return !active_.empty();
+ArrivalReport RealTimeArbiter::resolveArrival(const Motion& motion) {
+    const Position from = motion.from();
+    const Position to = motion.to();
+
+    const std::shared_ptr<Piece> arriver = board_.getPieceAt(from);
+    const std::shared_ptr<Piece> occupant = board_.getPieceAt(to);
+
+    // An enemy motion arriving at an airborne piece's cell: the airborne piece
+    // captures the arriver. Lift the airborne piece out; the arriver takes the
+    // cell for now and is removed when the jump lands.
+    if (occupant && occupant->getState() == State::Airborne && arriver &&
+        arriver->getColor() != occupant->getColor()) {
+        if (Jump* jump = jumpAt(to)) {
+            jump->lift(occupant);
+        }
+        board_.removePiece(to);
+        board_.movePiece(from, to);
+        startCooldown(board_.getPieceAt(to)->getId(), to);
+        return ArrivalReport{to, false, true};
+    }
+
+    bool kingCaptured = false;
+    if (occupant) {
+        kingCaptured = occupant->getKind() == Kind::King;
+        occupant->setState(State::Captured);
+        board_.removePiece(to);
+    }
+    board_.movePiece(from, to);
+    startCooldown(board_.getPieceAt(to)->getId(), to);
+
+    return ArrivalReport{to, kingCaptured, true};
+}
+
+void RealTimeArbiter::landAirborne(int deltaMs,
+                                   std::vector<ArrivalReport>& reports) {
+    for (auto it = airborne_.begin(); it != airborne_.end();) {
+        it->advance(deltaMs);
+        if (!it->hasLanded()) {
+            ++it;
+            continue;
+        }
+
+        const Position cell = it->cell();
+        if (it->isLifted()) {
+            // An enemy arrived during the jump: remove it, and the airborne piece
+            // lands back in its cell (capturing the arriver).
+            const std::shared_ptr<Piece> victim = board_.getPieceAt(cell);
+            const bool kingCaptured = victim && victim->getKind() == Kind::King;
+            if (victim) {
+                victim->setState(State::Captured);
+                board_.removePiece(cell);
+            }
+            std::shared_ptr<Piece> lander = it->lifted();
+            lander->setCell(cell);
+            board_.addPiece(lander);
+            startCooldown(lander->getId(), cell);
+            reports.push_back(ArrivalReport{cell, kingCaptured, false});
+        } else {
+            // No enemy arrived: the piece just lands and cools down.
+            startCooldown(board_.getPieceAt(cell)->getId(), cell);
+        }
+        it = airborne_.erase(it);
+    }
+}
+
+void RealTimeArbiter::startCooldown(std::uint32_t pieceId, Position cell) {
+    board_.setPieceState(cell, State::Resting);
+    resting_.emplace_back(pieceId, cell);
+}
+
+void RealTimeArbiter::tickCooldowns(int deltaMs) {
+    for (auto it = resting_.begin(); it != resting_.end();) {
+        it->advance(deltaMs);
+        if (!it->hasElapsed()) {
+            ++it;
+            continue;
+        }
+        const std::shared_ptr<Piece> piece = board_.getPieceAt(it->cell());
+        if (piece && piece->getId() == it->pieceId() &&
+            piece->getState() == State::Resting) {
+            piece->setState(State::Idle);
+        }
+        it = resting_.erase(it);
+    }
+}
+
+bool RealTimeArbiter::isAirborneAt(Position cell) const {
+    const std::shared_ptr<Piece> piece = board_.getPieceAt(cell);
+    return piece && piece->getState() == State::Airborne;
+}
+
+Jump* RealTimeArbiter::jumpAt(Position cell) {
+    for (Jump& jump : airborne_) {
+        if (jump.cell() == cell) return &jump;
+    }
+    return nullptr;
 }
 
 }  // namespace kfc::realtime

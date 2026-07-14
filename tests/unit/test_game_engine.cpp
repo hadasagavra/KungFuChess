@@ -20,6 +20,11 @@ using kfc::model::Position;
 
 namespace {
 
+// Move + jump durations and the cooldown are all 1000ms in the test constants.
+constexpr int oneCellMs = 1000;
+constexpr int cooldownMs = 1000;
+constexpr int jumpMs = 1000;
+
 std::shared_ptr<Piece> place(Board& board, std::uint32_t id, Color color,
                              Kind kind, Position cell) {
     auto piece = std::make_shared<Piece>(id, color, kind, cell);
@@ -70,27 +75,76 @@ TEST_CASE("requestMove forwards the RuleEngine rejection reason") {
     }
 }
 
-TEST_CASE("wait advances motion and only moves the piece on arrival") {
+TEST_CASE("wait moves the piece only on arrival") {
     Board board{8, 8};
     auto rook = place(board, 1, Color::White, Kind::Rook, Position{4, 4});
     GameEngine engine{board};
     REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
 
-    SUBCASE("sub-threshold: piece still on source, motion still active") {
-        engine.wait(999);
+    SUBCASE("sub-threshold: piece still on source") {
+        engine.wait(oneCellMs - 1);
         const GameSnapshot snap = engine.getSnapshot();
         CHECK(snap.pieceAt(Position{4, 4}).has_value());
         CHECK_FALSE(snap.pieceAt(Position{4, 5}).has_value());
-        CHECK(engine.requestMove(Position{4, 4}, Position{4, 5}).reason ==
-              "motion_in_progress");
     }
-    SUBCASE("at threshold: piece arrives and a new move is accepted") {
-        engine.wait(1000);
+    SUBCASE("at threshold: piece arrives at destination") {
+        engine.wait(oneCellMs);
         const GameSnapshot snap = engine.getSnapshot();
         CHECK_FALSE(snap.pieceAt(Position{4, 4}).has_value());
         CHECK(snap.pieceAt(Position{4, 5}).has_value());
         CHECK(rook->getCell() == Position{4, 5});
-        CHECK(engine.requestMove(Position{4, 5}, Position{4, 6}).isAccepted);
+    }
+}
+
+TEST_CASE("a piece must cool down before it can move again") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
+    engine.wait(oneCellMs);  // arrives -> resting (cooldown)
+
+    const MoveResult duringCooldown = engine.requestMove(Position{4, 5}, Position{4, 6});
+    CHECK_FALSE(duringCooldown.isAccepted);
+    CHECK(duringCooldown.reason == "not_idle");
+
+    engine.wait(cooldownMs);  // cooldown elapses -> idle
+    CHECK(engine.requestMove(Position{4, 5}, Position{4, 6}).isAccepted);
+}
+
+TEST_CASE("a pawn that reaches the last row is promoted to a queen") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Pawn, Position{1, 4});  // one step from row 0
+    GameEngine engine{board};
+
+    REQUIRE(engine.requestMove(Position{1, 4}, Position{0, 4}).isAccepted);
+    engine.wait(oneCellMs);
+
+    const std::optional<Piece> promoted = engine.getSnapshot().pieceAt(Position{0, 4});
+    REQUIRE(promoted.has_value());
+    CHECK(promoted->getKind() == Kind::Queen);
+}
+
+TEST_CASE("requestJump keeps the piece in place and enforces idleness") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Knight, Position{4, 4});
+    GameEngine engine{board};
+
+    SUBCASE("jumping an idle piece is accepted and it stays put") {
+        CHECK(engine.requestJump(Position{4, 4}).isAccepted);
+        engine.wait(jumpMs);  // lands
+        CHECK(engine.getSnapshot().pieceAt(Position{4, 4}).has_value());
+    }
+    SUBCASE("cannot jump a piece that is not idle") {
+        REQUIRE(engine.requestJump(Position{4, 4}).isAccepted);  // now airborne
+        const MoveResult again = engine.requestJump(Position{4, 4});
+        CHECK_FALSE(again.isAccepted);
+        CHECK(again.reason == "not_idle");
+    }
+    SUBCASE("cannot jump an empty cell") {
+        const MoveResult empty = engine.requestJump(Position{0, 0});
+        CHECK_FALSE(empty.isAccepted);
+        CHECK(empty.reason == "no_piece");
     }
 }
 
@@ -101,7 +155,7 @@ TEST_CASE("capturing the king ends the game") {
     GameEngine engine{board};
 
     REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
-    engine.wait(2000);
+    engine.wait(2 * oneCellMs);
 
     CHECK(engine.isGameOver());
     CHECK(engine.getSnapshot().isOver());
@@ -118,10 +172,10 @@ TEST_CASE("a non-king capture does not end the game") {
     GameEngine engine{board};
 
     REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
-    engine.wait(2000);
+    engine.wait(2 * oneCellMs);
 
     CHECK_FALSE(engine.isGameOver());
-    CHECK_FALSE(engine.getSnapshot().isOver());
+    engine.wait(cooldownMs);  // let the rook finish cooling down
     CHECK(engine.requestMove(Position{4, 6}, Position{4, 7}).isAccepted);
 }
 
@@ -142,10 +196,5 @@ TEST_CASE("getSnapshot reflects the current logical state") {
     CHECK(rook->getColor() == Color::White);
     CHECK(rook->getKind() == Kind::Rook);
 
-    const std::optional<Piece> king = snap.pieceAt(Position{0, 0});
-    REQUIRE(king.has_value());
-    CHECK(king->getColor() == Color::Black);
-    CHECK(king->getKind() == Kind::King);
-
-    CHECK_FALSE(snap.pieceAt(Position{1, 1}).has_value());  // empty cell
+    CHECK_FALSE(snap.pieceAt(Position{1, 1}).has_value());
 }

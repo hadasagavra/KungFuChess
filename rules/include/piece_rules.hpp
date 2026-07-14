@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <set>
 
 #include "model/include/board.hpp"
@@ -55,12 +56,18 @@ public:
         const model::Board& board, const model::Piece& piece) const override;
 };
 
-// Forward one square (never a capture); capture one square diagonally forward.
-// No initial double-step, no en passant, no promotion.
+// Forward one square (never a capture); a double step from the start row when the
+// path is clear; capture one square diagonally forward. No en passant.
 class PawnRules : public PieceRules {
 public:
     std::set<model::Position> legalDestinations(
         const model::Board& board, const model::Piece& piece) const override;
 };
+
+// If the piece is a pawn that has reached its promotion row, the kind it should
+// become (Queen); otherwise std::nullopt. A rules concern the engine applies on
+// arrival.
+std::optional<model::Kind> promotedKind(const model::Board& board,
+                                        const model::Piece& piece);
 
 }  // namespace kfc::rules

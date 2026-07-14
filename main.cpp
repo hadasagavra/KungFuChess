@@ -1,7 +1,6 @@
 #include <iostream>
 #include <optional>
 #include <string>
-
 #include "engine/include/game_engine.hpp"
 #include "input/include/board_mapper.hpp"
 #include "input/include/controller.hpp"
@@ -9,10 +8,8 @@
 #include "texttests/include/script_parser.hpp"
 #include "texttests/include/script_runner.hpp"
 
-// Composition root: wire io -> engine -> input -> texttests and replay the
-// parsed commands. The GameEngine BORROWS the board, so `parsed` (which owns it)
-// must outlive the engine -- both live here for the whole run. Malformed input
-// is reported as "ERROR <code>" rather than crashing.
+//https://github.com/hadasagavra/KungFuChess
+
 int main() {
     try {
         kfc::io::ParsedInput parsed = kfc::io::parseInput(std::cin);

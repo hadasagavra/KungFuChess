@@ -71,4 +71,13 @@ void Board::movePiece(Position from, Position to) {
     piece->setCell(to);
 }
 
+void Board::setPieceState(Position pos, State state) {
+    ensureInsideBounds(pos);
+    const std::shared_ptr<Piece> piece = grid_[indexOf(pos)];
+    if (!piece) {
+        throw std::invalid_argument("Board::setPieceState: cell is empty");
+    }
+    piece->setState(state);
+}
+
 }  // namespace kfc::model

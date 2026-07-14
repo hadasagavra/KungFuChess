@@ -9,7 +9,7 @@ namespace kfc::model {
 
 enum class Color { White, Black };
 enum class Kind { King, Queen, Rook, Bishop, Knight, Pawn };
-enum class State { Idle, Moving, Captured };
+enum class State { Idle, Moving, Airborne, Resting, Captured };
 
 // A Piece is a domain entity: a stable identity (id) plus descriptive
 // attributes and a lifecycle flag. It knows only where it currently sits
@@ -30,6 +30,7 @@ public:
 
     void setCell(const Position& cell) { cell_ = cell; }
     void setState(State state) { state_ = state; }
+    void setKind(Kind kind) { kind_ = kind; }  // promotion
 
 private:
     std::uint32_t id_;

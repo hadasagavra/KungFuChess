@@ -29,8 +29,20 @@ void Controller::handleSecondClick(std::optional<model::Position> cell) {
         selected_.reset();
         return;
     }
+    // Clicking one of your own pieces re-selects it rather than moving onto it.
+    const std::optional<model::Piece> selectedPiece =
+        engine_.getSnapshot().pieceAt(*selected_);
+    const std::optional<model::Piece> target = engine_.getSnapshot().pieceAt(*cell);
+    if (target && selectedPiece && target->getColor() == selectedPiece->getColor()) {
+        selected_ = cell;
+        return;
+    }
     engine_.requestMove(*selected_, *cell);
     selected_.reset();     // clear after every in-board second click, legal or not
 }
 
+void Controller::handleJump(int x, int y) {
+    std::optional<model::Position> cell = mapper_.toCell(x, y);
+    if (cell) engine_.requestJump(*cell);
+}
 }  // namespace kfc::input
