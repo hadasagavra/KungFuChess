@@ -59,3 +59,6 @@ Thumbs.db
 
 # Vendored OpenCV SDK (downloaded separately, too heavy for git)
 third_party/opencv/
+
+# Generated render output (demo/smoke artifacts)
+assets/_*.png

@@ -91,6 +91,17 @@ add_custom_command(TARGET kfc POST_BUILD
     VERBATIM)
 
 # ---------------------------------------------------------------------------
+# render_demo: a small driver that builds a starting-position GameSnapshot and
+# renders it to a PNG. Visual check for the view layer; not part of the app.
+# ---------------------------------------------------------------------------
+add_executable(render_demo "${CMAKE_CURRENT_SOURCE_DIR}/view/demo/render_demo.cpp")
+target_link_libraries(render_demo PRIVATE kfc_view)
+add_custom_command(TARGET render_demo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OPENCV_DLL}" "$<TARGET_FILE_DIR:render_demo>"
+    VERBATIM)
+
+# ---------------------------------------------------------------------------
 # unit_tests: the doctest suite. test_main.cpp provides doctest's entry point;
 # every tests/unit/*.cpp registers TEST_CASEs.
 # ---------------------------------------------------------------------------
