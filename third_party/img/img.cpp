@@ -120,8 +120,62 @@ void Img::show() {
     if (img.empty()) {
         throw std::runtime_error("Image not loaded.");
     }
-    
+
     cv::imshow("Image", img);
     cv::waitKey(0);
     cv::destroyAllWindows();
+}
+
+void Img::openWindow(const std::string& title) {
+    windowTitle_ = title;
+    // Resizable window that preserves the image aspect ratio when the user
+    // stretches it -- letterboxing (not distortion) fills the extra space.
+    cv::namedWindow(windowTitle_, cv::WINDOW_NORMAL | cv::WINDOW_KEEPRATIO);
+    cv::setMouseCallback(windowTitle_, &Img::onMouse, this);
+}
+
+void Img::showFrame(const Img& frame) {
+    if (windowTitle_.empty()) {
+        throw std::runtime_error("openWindow() must be called before showFrame().");
+    }
+    if (frame.img.empty()) {
+        throw std::runtime_error("Frame not loaded.");
+    }
+
+    cv::imshow(windowTitle_, frame.img);
+    // Non-blocking: pump the GUI event queue (mouse callback, resize) for ~1ms
+    // and return, so the caller keeps control of the render loop.
+    cv::waitKey(1);
+}
+
+bool Img::isWindowOpen() const {
+    if (windowTitle_.empty()) {
+        return false;
+    }
+    // Drops below 1 once the user closes the window via its X button.
+    return cv::getWindowProperty(windowTitle_, cv::WND_PROP_VISIBLE) >= 1;
+}
+
+std::optional<ClickPos> Img::pollClick() {
+    std::optional<ClickPos> click = pendingClick_;
+    pendingClick_.reset();
+    return click;
+}
+
+void Img::closeWindow() {
+    if (!windowTitle_.empty()) {
+        cv::destroyWindow(windowTitle_);
+        windowTitle_.clear();
+    }
+}
+
+void Img::onMouse(int event, int x, int y, int /*flags*/, void* userdata) {
+    if (event != cv::EVENT_LBUTTONDOWN) {
+        return;
+    }
+    // OpenCV already reports the click in image pixel coordinates: it maps the
+    // window click through the current resize/aspect-ratio itself. So we store
+    // (x, y) as-is -- doing our own scaling here would double-transform it.
+    Img* self = static_cast<Img*>(userdata);
+    self->pendingClick_ = ClickPos{x, y};
 } 
