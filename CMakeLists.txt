@@ -47,10 +47,48 @@ if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ---------------------------------------------------------------------------
+# OpenCV: a vendored, prebuilt MSVC /MD build under third_party/opencv. It ships
+# no OpenCVConfig.cmake, so find_package won't work -- we wire include/lib/dll by
+# hand. ONLY the view layer links OpenCV; the Business Logic never sees it.
+# Because the prebuilt is /MD, the whole project must be built with MSVC (the
+# CMake default MSVC runtime is /MD[d], which matches). MinGW cannot link it.
+# ---------------------------------------------------------------------------
+set(OPENCV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/opencv/OpenCV_451")
+set(OPENCV_INCLUDE_DIR "${OPENCV_DIR}/include")
+# Debug links the *d libs/dll (also /MDd); every other config links release.
+set(OPENCV_LIB "$<IF:$<CONFIG:Debug>,${OPENCV_DIR}/bin/opencv_world451d.lib,${OPENCV_DIR}/bin/opencv_world451.lib>")
+set(OPENCV_DLL "$<IF:$<CONFIG:Debug>,${OPENCV_DIR}/bin/opencv_world451d.dll,${OPENCV_DIR}/bin/opencv_world451.dll>")
+
+# ---------------------------------------------------------------------------
+# kfc_view: the GUI output layer (view/) plus the vendored Img wrapper. This is
+# the ONLY target that links OpenCV, keeping the graphics stack out of Business
+# Logic. Links kfc_lib for the domain types a GameSnapshot references. OpenCV's
+# headers are added as SYSTEM includes so their warnings stay out of our /W4.
+# ---------------------------------------------------------------------------
+file(GLOB_RECURSE KFC_VIEW_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/*.cpp")
+
+add_library(kfc_view STATIC
+    ${KFC_VIEW_SOURCES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img/img.cpp")
+
+target_link_libraries(kfc_view PUBLIC kfc_lib "${OPENCV_LIB}")
+target_include_directories(kfc_view PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img")
+target_include_directories(kfc_view SYSTEM PUBLIC "${OPENCV_INCLUDE_DIR}")
+
+# ---------------------------------------------------------------------------
 # kfc: the application (composition root).
 # ---------------------------------------------------------------------------
 add_executable(kfc "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
-target_link_libraries(kfc PRIVATE kfc_lib)
+target_link_libraries(kfc PRIVATE kfc_lib kfc_view)
+
+# The prebuilt OpenCV is a DLL: drop it next to kfc.exe so the app runs from the
+# build tree without needing OpenCV on PATH.
+add_custom_command(TARGET kfc POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${OPENCV_DLL}" "$<TARGET_FILE_DIR:kfc>"
+    VERBATIM)
 
 # ---------------------------------------------------------------------------
 # unit_tests: the doctest suite. test_main.cpp provides doctest's entry point;

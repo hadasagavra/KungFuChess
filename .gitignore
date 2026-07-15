@@ -56,3 +56,6 @@ Testing/
 # OS files
 Thumbs.db
 .DS_Store
+
+# Vendored OpenCV SDK (downloaded separately, too heavy for git)
+third_party/opencv/
