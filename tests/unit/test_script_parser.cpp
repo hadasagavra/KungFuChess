@@ -7,6 +7,7 @@
 
 using kfc::texttests::ClickCommand;
 using kfc::texttests::Command;
+using kfc::texttests::JumpCommand;
 using kfc::texttests::parseCommand;
 using kfc::texttests::PrintBoardCommand;
 using kfc::texttests::WaitCommand;
@@ -18,6 +19,15 @@ TEST_CASE("parseCommand parses a click command") {
     REQUIRE(std::holds_alternative<ClickCommand>(*cmd));
     CHECK(std::get<ClickCommand>(*cmd).x == 150);
     CHECK(std::get<ClickCommand>(*cmd).y == 250);
+}
+
+TEST_CASE("parseCommand parses a jump command") {
+    const std::optional<Command> cmd = parseCommand("jump 150 250");
+
+    REQUIRE(cmd.has_value());
+    REQUIRE(std::holds_alternative<JumpCommand>(*cmd));
+    CHECK(std::get<JumpCommand>(*cmd).x == 150);
+    CHECK(std::get<JumpCommand>(*cmd).y == 250);
 }
 
 TEST_CASE("parseCommand parses a wait command") {
@@ -52,7 +62,10 @@ TEST_CASE("parseCommand rejects malformed input") {
         CHECK_FALSE(parseCommand("    ").has_value());
     }
     SUBCASE("unknown command") {
-        CHECK_FALSE(parseCommand("jump 1 2").has_value());
+        CHECK_FALSE(parseCommand("teleport 1 2").has_value());
+    }
+    SUBCASE("jump with too few arguments") {
+        CHECK_FALSE(parseCommand("jump 1").has_value());
     }
     SUBCASE("click with too few arguments") {
         CHECK_FALSE(parseCommand("click 1").has_value());
