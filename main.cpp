@@ -2,6 +2,7 @@
 #include <chrono>
 #include <iostream>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -87,10 +88,28 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
         engine.wait(deltaMs);
         last = now;
 
-        view.render(kfc::view::buildSnapshot(engine.getSnapshot(), cellPx),
-                    deltaMs);
+        // Highlight the selected piece's legal destinations, if any. The
+        // Controller owns the selection; the engine (Business Logic) answers
+        // where that piece may move. The composition root only plumbs the two
+        // together -- no game rules live here.
+        std::set<kfc::model::Position> highlights;
+        if (const std::optional<kfc::model::Position>& selected =
+                controller.selection()) {
+            highlights = engine.legalDestinationsFor(*selected);
+        }
+        view.render(
+            kfc::view::buildSnapshot(engine.getSnapshot(), cellPx, highlights),
+            deltaMs);
 
-        if (std::optional<kfc::view::PixelPoint> click = view.pollClick()) {
+        // A double-click requests a jump; a single click drives the ordinary
+        // select/move flow. Drain both channels each frame, but let a jump win:
+        // OpenCV emits the opening LBUTTONDOWN as well, and acting on it too
+        // would leave a stray selection on the just-jumped piece.
+        const std::optional<kfc::view::PixelPoint> dbl = view.pollDoubleClick();
+        const std::optional<kfc::view::PixelPoint> click = view.pollClick();
+        if (dbl) {
+            controller.handleJump(dbl->x, dbl->y);
+        } else if (click) {
             controller.handleClick(click->x, click->y);
         }
     }

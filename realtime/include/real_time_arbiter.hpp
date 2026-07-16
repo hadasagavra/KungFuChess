@@ -33,6 +33,10 @@ public:
     // that need each motion's from/to/progress without seeing the live Motions.
     std::vector<MotionState> activeMotions() const;
 
+    // A read-only view of the active cooldowns, for callers (e.g. the display)
+    // that need each resting cell + progress without seeing the live Cooldowns.
+    std::vector<CooldownState> activeCooldowns() const;
+
     // Begin a slide / a jump. Returns false if it cannot start.
     bool startMotion(model::Position from, model::Position to);
     bool startJump(model::Position cell);

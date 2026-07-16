@@ -28,6 +28,10 @@ inline bool operator!=(const PixelPoint& a, const PixelPoint& b) {
 // id is the piece's stable identity, so the Animator can track a piece's frame
 // across frames. frame is the sprite number to draw (1-based); the seam leaves
 // it at the first frame and the Animator fills the animated value.
+//
+// restProgress is how far a resting piece is through its cooldown (0..1, 1 =
+// done); it drives the cooldown overlay. It is only meaningful when
+// state == Resting and stays 0 otherwise.
 struct PieceView {
     model::Kind kind;
     model::Color color;
@@ -35,6 +39,7 @@ struct PieceView {
     PixelPoint position;
     std::uint32_t id = 0;
     int frame = firstSpriteFrame;
+    double restProgress = 0.0;
 };
 
 // The read-only contract the Renderer draws. Board dimensions are in CELLS;
@@ -43,6 +48,10 @@ struct GameSnapshot {
     int boardWidth;
     int boardHeight;
     std::vector<PieceView> pieces;
+    // Cells to shade as legal-move hints, each the top-left pixel of a cell. The
+    // seam fills these from the engine's legal-destination query; the Renderer
+    // paints them. Empty when nothing is selected.
+    std::vector<PixelPoint> highlights;
 };
 
 }  // namespace kfc::view

@@ -60,8 +60,9 @@ set(OPENCV_LIB "$<IF:$<CONFIG:Debug>,${OPENCV_DIR}/bin/opencv_world451d.lib,${OP
 set(OPENCV_DLL "$<IF:$<CONFIG:Debug>,${OPENCV_DIR}/bin/opencv_world451d.dll,${OPENCV_DIR}/bin/opencv_world451.dll>")
 
 # ---------------------------------------------------------------------------
-# kfc_view: the GUI output layer (view/) plus the vendored Img wrapper. This is
-# the ONLY target that links OpenCV, keeping the graphics stack out of Business
+# kfc_view: the GUI output layer (view/) plus the OpenCV wrapper (Img bitmap +
+# MouseWindow window/input). This is the ONLY target that links OpenCV, keeping
+# the graphics stack out of Business
 # Logic. Links kfc_lib for the domain types a GameSnapshot references. OpenCV's
 # headers are added as SYSTEM includes so their warnings stay out of our /W4.
 # ---------------------------------------------------------------------------
@@ -70,7 +71,8 @@ file(GLOB_RECURSE KFC_VIEW_SOURCES CONFIGURE_DEPENDS
 
 add_library(kfc_view STATIC
     ${KFC_VIEW_SOURCES}
-    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img/img.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img/img.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img/mouse_window.cpp")
 
 target_link_libraries(kfc_view PUBLIC kfc_lib "${OPENCV_LIB}")
 target_include_directories(kfc_view PUBLIC

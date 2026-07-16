@@ -1,18 +1,13 @@
 #pragma once
 
 #include <opencv2/opencv.hpp>
-#include <optional>
 #include <string>
 #include <filesystem>
 
-// A mouse click reported by Img, already converted to IMAGE pixel coordinates
-// (top-left origin). Img speaks pixels only -- it knows nothing about cells,
-// board positions, or game rules; mapping a pixel to a cell happens above Img.
-struct ClickPos {
-    int x;
-    int y;
-};
-
+// A pure image/bitmap wrapper over OpenCV: load, composite, annotate, and hand
+// back the underlying Mat. It draws pixels and nothing more -- no window, no
+// input, no game rules. The interactive window and mouse capture live in the
+// peer MouseWindow class (mouse_window.hpp).
 class Img {
 public:
     Img();
@@ -53,6 +48,21 @@ public:
     void put_text(const std::string& txt, int x, int y, double font_size,
                   const cv::Scalar& color = cv::Scalar(255, 255, 255, 255),
                   int thickness = 1);
+
+    /**
+     * Draw a rectangle on the image, optionally alpha-blended over what is
+     * already there. Used e.g. to overlay a rest/cooldown indicator on a cell.
+     *
+     * @param x X coordinate of the top-left corner
+     * @param y Y coordinate of the top-left corner
+     * @param w Rectangle width in pixels
+     * @param h Rectangle height in pixels
+     * @param color Rectangle color (BGR or BGRA)
+     * @param thickness Border thickness; negative (cv::FILLED) fills the rect
+     * @param alpha Opacity in [0, 1]; 1.0 draws opaque, below 1.0 blends
+     */
+    void draw_rect(int x, int y, int w, int h, const cv::Scalar& color,
+                   int thickness = 1, double alpha = 1.0);
     
     /**
      * Display the image in a window. Blocks until a key is pressed, then closes
@@ -60,41 +70,6 @@ public:
      * non-blocking loop.
      */
     void show();
-
-    /**
-     * Open a persistent, resizable window and start listening for mouse clicks.
-     * The window keeps the image aspect ratio when resized. Left-clicks are
-     * captured and reported (in image pixels) via pollClick().
-     *
-     * @param title Window title / OpenCV window name
-     */
-    void openWindow(const std::string& title = "KungFuChess");
-
-    /**
-     * Draw one frame into the persistent window without blocking. Pumps the GUI
-     * event queue (so clicks and resizes are processed) and returns immediately.
-     * Must be called after openWindow().
-     *
-     * @param frame The image to display this tick
-     */
-    void showFrame(const Img& frame);
-
-    /**
-     * @return true while the persistent window is open (false once the user
-     *         closes it via the window's X button)
-     */
-    bool isWindowOpen() const;
-
-    /**
-     * Retrieve the last unread left-click, in image pixel coordinates, and clear
-     * it. Returns std::nullopt if no new click occurred since the last call.
-     */
-    std::optional<ClickPos> pollClick();
-
-    /**
-     * Close the persistent window opened by openWindow().
-     */
-    void closeWindow();
 
     /**
      * Get the underlying OpenCV Mat
@@ -107,14 +82,5 @@ public:
     bool is_loaded() const { return !img.empty(); }
 
 private:
-    // Mouse callback registered with OpenCV. userdata points at the owning Img.
-    // Filters to left-button presses and stores the click (which OpenCV already
-    // reports in image pixel coordinates) in pendingClick_.
-    static void onMouse(int event, int x, int y, int flags, void* userdata);
-
     cv::Mat img;
-
-    // Persistent-window state. windowTitle_ is empty when no window is open.
-    std::string windowTitle_;
-    std::optional<ClickPos> pendingClick_;  // last unread left-click (image px)
 };

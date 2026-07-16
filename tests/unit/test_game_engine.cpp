@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <set>
 
 #include "engine/include/game_engine.hpp"
 #include "model/include/board.hpp"
@@ -177,6 +178,50 @@ TEST_CASE("a non-king capture does not end the game") {
     CHECK_FALSE(engine.isGameOver());
     engine.wait(cooldownMs);  // let the rook finish cooling down
     CHECK(engine.requestMove(Position{4, 6}, Position{4, 7}).isAccepted);
+}
+
+TEST_CASE("legalDestinationsFor returns the idle piece's rule destinations") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+
+    const std::set<Position> dests = engine.legalDestinationsFor(Position{4, 4});
+
+    // A lone rook slides its whole rank and file: 7 + 7 squares.
+    CHECK(dests.size() == 14);
+    CHECK(dests.count(Position{4, 5}) == 1);  // along the rank
+    CHECK(dests.count(Position{0, 4}) == 1);  // along the file
+    CHECK(dests.count(Position{4, 4}) == 0);  // never its own cell
+    CHECK(dests.count(Position{5, 5}) == 0);  // not on a rook line
+}
+
+TEST_CASE("legalDestinationsFor is empty when no move can start") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+
+    SUBCASE("an empty cell has no destinations") {
+        CHECK(engine.legalDestinationsFor(Position{0, 0}).empty());
+    }
+    SUBCASE("a moving (non-idle) piece has no destinations") {
+        REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
+        CHECK(engine.legalDestinationsFor(Position{4, 4}).empty());
+    }
+}
+
+TEST_CASE("legalDestinationsFor is empty once the game is over") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    place(board, 2, Color::Black, Kind::King, Position{4, 6});
+    place(board, 3, Color::White, Kind::Knight, Position{0, 0});  // stays idle
+    GameEngine engine{board};
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
+    engine.wait(2 * oneCellMs);  // rook captures the king -> game over
+    REQUIRE(engine.isGameOver());
+
+    // The idle knight would normally have moves; the game-over gate wins.
+    CHECK(engine.legalDestinationsFor(Position{0, 0}).empty());
 }
 
 TEST_CASE("getSnapshot reflects the current logical state") {

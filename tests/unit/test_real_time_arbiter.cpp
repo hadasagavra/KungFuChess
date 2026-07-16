@@ -16,6 +16,8 @@ using kfc::model::Piece;
 using kfc::model::Position;
 using kfc::model::State;
 using kfc::realtime::ArrivalReport;
+using kfc::realtime::Cooldown;
+using kfc::realtime::CooldownState;
 using kfc::realtime::Motion;
 using kfc::realtime::MotionState;
 using kfc::realtime::RealTimeArbiter;
@@ -112,6 +114,37 @@ TEST_CASE("Duration is the cell-step count (diagonal counts as steps)") {
         CHECK(arbiter.advance(2999).empty());
         CHECK(arbiter.advance(1).size() == 1);
     }
+}
+
+TEST_CASE("Cooldown reports its rest progress, clamped to [0,1]") {
+    Cooldown cooldown{1, Position{4, 4}};  // 1000ms rest
+    CHECK(cooldown.progress() == doctest::Approx(0.0));
+    cooldown.advance(250);
+    CHECK(cooldown.progress() == doctest::Approx(0.25));
+    cooldown.advance(750);
+    CHECK(cooldown.progress() == doctest::Approx(1.0));
+    cooldown.advance(500);  // past the rest stays clamped
+    CHECK(cooldown.progress() == doctest::Approx(1.0));
+}
+
+TEST_CASE("activeCooldowns exposes each resting piece's cell/progress") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    RealTimeArbiter arbiter{board};
+
+    CHECK(arbiter.activeCooldowns().empty());
+
+    arbiter.startMotion(Position{4, 4}, Position{4, 5});  // 1 cell = 1000ms
+    arbiter.advance(1000);                                // arrives -> Resting
+    arbiter.advance(250);                                 // quarter through rest
+
+    const std::vector<CooldownState> cooldowns = arbiter.activeCooldowns();
+    REQUIRE(cooldowns.size() == 1);
+    CHECK(cooldowns[0].cell == Position{4, 5});
+    CHECK(cooldowns[0].progress == doctest::Approx(0.25));
+
+    arbiter.advance(750);  // rest elapses -> no longer resting
+    CHECK(arbiter.activeCooldowns().empty());
 }
 
 TEST_CASE("Cooldown blocks the piece until it elapses, then it is idle again") {

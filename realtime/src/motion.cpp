@@ -39,6 +39,15 @@ void Jump::advance(int deltaMs) { elapsedMs_ += deltaMs; }
 Cooldown::Cooldown(std::uint32_t pieceId, model::Position cell)
     : pieceId_(pieceId), cell_(cell) {}
 
+double Cooldown::progress() const {
+    if constexpr (cooldownMs <= 0) {
+        return 1.0;
+    } else {
+        const double fraction = static_cast<double>(elapsedMs_) / cooldownMs;
+        return std::clamp(fraction, 0.0, 1.0);
+    }
+}
+
 void Cooldown::advance(int deltaMs) { elapsedMs_ += deltaMs; }
 
 }  // namespace kfc::realtime

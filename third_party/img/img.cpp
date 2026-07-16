@@ -40,17 +40,19 @@ void Img::draw_on(Img& other_img, int x, int y) {
         throw std::runtime_error("Both images must be loaded before drawing.");
     }
 
-    // Handle different channel counts
+    // Handle different channel counts.
     cv::Mat source_img = img;
     cv::Mat target_img = other_img.img;
-    
-    if (source_img.channels() != target_img.channels()) {
-        if (source_img.channels() == 3 && target_img.channels() == 4) {
-            cv::cvtColor(source_img, source_img, cv::COLOR_BGR2BGRA);
-        } else if (source_img.channels() == 4 && target_img.channels() == 3) {
-            cv::cvtColor(source_img, source_img, cv::COLOR_BGRA2BGR);
-        }
+
+    if (source_img.channels() == 3 && target_img.channels() == 4) {
+        // Opaque source onto a BGRA target: give it a full-opacity alpha so the
+        // blend below treats it as a solid copy.
+        cv::cvtColor(source_img, source_img, cv::COLOR_BGR2BGRA);
     }
+    // A BGRA source onto a BGR target is intentionally NOT flattened to BGR here:
+    // doing so would discard the alpha and paste the (often black) transparent
+    // background opaquely. Instead the source keeps its alpha and the blend below
+    // composites it over the 3-channel destination.
 
     int h = source_img.rows;
     int w = source_img.cols;
@@ -116,6 +118,33 @@ void Img::put_text(const std::string& txt, int x, int y, double font_size,
                 color, thickness, cv::LINE_AA);
 }
 
+void Img::draw_rect(int x, int y, int w, int h, const cv::Scalar& color,
+                    int thickness, double alpha) {
+    if (img.empty()) {
+        throw std::runtime_error("Image not loaded.");
+    }
+    if (alpha >= 1.0) {
+        // cv::rectangle clips to the image bounds on its own -- safe as-is.
+        cv::rectangle(img, cv::Rect(x, y, w, h), color, thickness);
+    } else {
+        // The blend path builds a temporary ROI, so it would throw if the rect
+        // spills off the image (e.g. a cell border at the board edge). Clamp the
+        // ROI to the image, then draw the rectangle at its original position
+        // relative to the clamped region so the visible part stays put -- and
+        // cv::rectangle clips whatever still overhangs.
+        const cv::Rect requested(x, y, w, h);
+        const cv::Rect safe = requested & cv::Rect(0, 0, img.cols, img.rows);
+        if (safe.width <= 0 || safe.height <= 0) {
+            return;  // fully off-image: nothing to draw
+        }
+        cv::Mat roi = img(safe);
+        cv::Mat overlay = roi.clone();
+        cv::rectangle(overlay, cv::Rect(x - safe.x, y - safe.y, w, h), color,
+                      thickness);
+        cv::addWeighted(overlay, alpha, roi, 1.0 - alpha, 0, roi);
+    }
+}
+
 void Img::show() {
     if (img.empty()) {
         throw std::runtime_error("Image not loaded.");
@@ -125,57 +154,3 @@ void Img::show() {
     cv::waitKey(0);
     cv::destroyAllWindows();
 }
-
-void Img::openWindow(const std::string& title) {
-    windowTitle_ = title;
-    // Resizable window that preserves the image aspect ratio when the user
-    // stretches it -- letterboxing (not distortion) fills the extra space.
-    cv::namedWindow(windowTitle_, cv::WINDOW_NORMAL | cv::WINDOW_KEEPRATIO);
-    cv::setMouseCallback(windowTitle_, &Img::onMouse, this);
-}
-
-void Img::showFrame(const Img& frame) {
-    if (windowTitle_.empty()) {
-        throw std::runtime_error("openWindow() must be called before showFrame().");
-    }
-    if (frame.img.empty()) {
-        throw std::runtime_error("Frame not loaded.");
-    }
-
-    cv::imshow(windowTitle_, frame.img);
-    // Non-blocking: pump the GUI event queue (mouse callback, resize) for ~1ms
-    // and return, so the caller keeps control of the render loop.
-    cv::waitKey(1);
-}
-
-bool Img::isWindowOpen() const {
-    if (windowTitle_.empty()) {
-        return false;
-    }
-    // Drops below 1 once the user closes the window via its X button.
-    return cv::getWindowProperty(windowTitle_, cv::WND_PROP_VISIBLE) >= 1;
-}
-
-std::optional<ClickPos> Img::pollClick() {
-    std::optional<ClickPos> click = pendingClick_;
-    pendingClick_.reset();
-    return click;
-}
-
-void Img::closeWindow() {
-    if (!windowTitle_.empty()) {
-        cv::destroyWindow(windowTitle_);
-        windowTitle_.clear();
-    }
-}
-
-void Img::onMouse(int event, int x, int y, int /*flags*/, void* userdata) {
-    if (event != cv::EVENT_LBUTTONDOWN) {
-        return;
-    }
-    // OpenCV already reports the click in image pixel coordinates: it maps the
-    // window click through the current resize/aspect-ratio itself. So we store
-    // (x, y) as-is -- doing our own scaling here would double-transform it.
-    Img* self = static_cast<Img*>(userdata);
-    self->pendingClick_ = ClickPos{x, y};
-} 

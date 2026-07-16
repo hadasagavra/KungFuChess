@@ -34,4 +34,10 @@ std::optional<PixelPoint> ImageView::pollClick() {
     return PixelPoint{click->x, click->y};
 }
 
+std::optional<PixelPoint> ImageView::pollDoubleClick() {
+    std::optional<ClickPos> click = window_.pollDoubleClick();
+    if (!click) return std::nullopt;
+    return PixelPoint{click->x, click->y};
+}
+
 }  // namespace kfc::view

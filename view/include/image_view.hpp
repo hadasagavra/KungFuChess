@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "img.hpp"
+#include "mouse_window.hpp"
 #include "view/include/animation_config_store.hpp"
 #include "view/include/animator.hpp"
 #include "view/include/game_snapshot.hpp"
@@ -41,11 +41,15 @@ public:
     // board cell belongs to the input layer, above the view.
     std::optional<PixelPoint> pollClick();
 
+    // The last unread double-click, in frame pixel coordinates, or std::nullopt
+    // if none. Same display-only contract as pollClick(): pixels, not cells.
+    std::optional<PixelPoint> pollDoubleClick();
+
 private:
     Renderer renderer_;
     AnimationConfigStore configStore_;  // disk-backed animation configs
     Animator animator_;                 // display-side animation state machine
-    Img window_;  // owns the persistent window + raw click capture
+    MouseWindow window_;  // owns the persistent window + raw click capture
 };
 
 }  // namespace kfc::view

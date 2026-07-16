@@ -24,6 +24,14 @@ private:
     Img loadSprite(model::Kind kind, model::Color color, model::State state,
                    int frame) const;
     void drawPieceOn(Img& frame, const PieceView& piece) const;
+    // Shades each legal-move hint cell with a translucent yellow fill. Drawn
+    // after the board but before the pieces, so a piece (e.g. a capturable enemy)
+    // stays visible on top of its highlight.
+    void drawHighlightsOn(Img& frame, const GameSnapshot& snapshot) const;
+    // Draws the cooldown indicator over a resting piece: a translucent shade
+    // whose top edge descends down the cell as the rest completes. No-op for a
+    // piece that is not resting.
+    void drawCooldownOn(Img& frame, const PieceView& piece) const;
 
     RenderConfig config_;
 };

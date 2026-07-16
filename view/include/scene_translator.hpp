@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <set>
 #include <vector>
 
 #include "engine/include/game_engine.hpp"
@@ -35,6 +36,18 @@ inline const realtime::MotionState* motionFrom(
     return nullptr;
 }
 
+// The active cooldown resting on a cell, or nullptr if none. A resting piece
+// stays on its cell, so the seam matches the cooldown on that cell.
+inline const realtime::CooldownState* cooldownAt(
+    const std::vector<realtime::CooldownState>& cooldowns, model::Position cell) {
+    for (const realtime::CooldownState& cooldown : cooldowns) {
+        if (cooldown.cell == cell) {
+            return &cooldown;
+        }
+    }
+    return nullptr;
+}
+
 // The GUI<-Logic output seam: projects the engine's live state onto a read-only
 // display DTO. It is the graphical twin of io::printBoard (engine state -> text):
 // here engine state -> pixels. It walks every cell and places each piece at
@@ -44,10 +57,17 @@ inline const realtime::MotionState* motionFrom(
 //
 // Header-only: it depends solely on two plain snapshot types, so both the app
 // and the unit tests can use it without linking the OpenCV-backed view library.
-inline GameSnapshot buildSnapshot(const engine::GameSnapshot& state, int cellPx) {
+inline GameSnapshot buildSnapshot(const engine::GameSnapshot& state, int cellPx,
+                                  const std::set<model::Position>& highlightCells = {}) {
     GameSnapshot snapshot;
     snapshot.boardWidth = state.width();
     snapshot.boardHeight = state.height();
+
+    // Legal-move hints for the selected piece: the seam owns the cell->pixel
+    // conversion here too, so the Renderer only ever paints pixels.
+    for (const model::Position& cell : highlightCells) {
+        snapshot.highlights.push_back(cellPixel(cell, cellPx));
+    }
 
     for (int row = 0; row < state.height(); ++row) {
         for (int col = 0; col < state.width(); ++col) {
@@ -69,9 +89,19 @@ inline GameSnapshot buildSnapshot(const engine::GameSnapshot& state, int cellPx)
                 }
             }
 
-            snapshot.pieces.push_back(
-                PieceView{piece->getKind(), piece->getColor(), piece->getState(),
-                          pixel, piece->getId()});
+            PieceView pieceView{piece->getKind(), piece->getColor(),
+                                piece->getState(), pixel, piece->getId()};
+
+            // A resting piece carries its cooldown progress so the view can draw
+            // a shrinking overlay; other states leave it at 0.
+            if (piece->getState() == model::State::Resting) {
+                if (const realtime::CooldownState* cooldown =
+                        cooldownAt(state.cooldowns(), cell)) {
+                    pieceView.restProgress = cooldown->progress;
+                }
+            }
+
+            snapshot.pieces.push_back(pieceView);
         }
     }
     return snapshot;

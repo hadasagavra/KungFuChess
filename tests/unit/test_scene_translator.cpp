@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <set>
 
 #include "engine/include/game_engine.hpp"
 #include "model/include/board.hpp"
@@ -74,6 +75,32 @@ TEST_CASE("buildSnapshot slides a moving piece between its cells") {
     // Halfway between col 2 (x=200) and col 3 (x=300); row 1 unchanged.
     CHECK(piece.position.x == 250);
     CHECK(piece.position.y == 100);
+}
+
+TEST_CASE("buildSnapshot maps highlight cells to their pixel corners") {
+    Board board{8, 8};
+    GameEngine engine{board};
+
+    const std::set<Position> cells{Position{1, 2}, Position{3, 0}};
+    const GameSnapshot snapshot =
+        buildSnapshot(engine.getSnapshot(), cellPx, cells);
+
+    // std::set orders by (row, col), so {1,2} comes before {3,0}. Each highlight
+    // is the top-left pixel of its cell: x = col * cellPx, y = row * cellPx.
+    REQUIRE(snapshot.highlights.size() == 2);
+    CHECK(snapshot.highlights[0].x == 200);  // col 2
+    CHECK(snapshot.highlights[0].y == 100);  // row 1
+    CHECK(snapshot.highlights[1].x == 0);    // col 0
+    CHECK(snapshot.highlights[1].y == 300);  // row 3
+}
+
+TEST_CASE("buildSnapshot leaves highlights empty by default") {
+    Board board{8, 8};
+    GameEngine engine{board};
+
+    const GameSnapshot snapshot = buildSnapshot(engine.getSnapshot(), cellPx);
+
+    CHECK(snapshot.highlights.empty());
 }
 
 TEST_CASE("buildSnapshot reports every occupied cell") {

@@ -25,6 +25,15 @@ std::vector<MotionState> RealTimeArbiter::activeMotions() const {
     return motions;
 }
 
+std::vector<CooldownState> RealTimeArbiter::activeCooldowns() const {
+    std::vector<CooldownState> cooldowns;
+    cooldowns.reserve(resting_.size());
+    for (const Cooldown& cooldown : resting_) {
+        cooldowns.push_back(cooldown.state());
+    }
+    return cooldowns;
+}
+
 bool RealTimeArbiter::startMotion(Position from, Position to) {
     if (hasActiveMotion()) {
         return false;

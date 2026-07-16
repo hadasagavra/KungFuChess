@@ -26,6 +26,14 @@ struct MotionState {
     double progress;
 };
 
+// A read-only snapshot of one active cooldown: the cell of the resting piece and
+// how far through its rest it is (0..1, 1 = done). Mirrors MotionState so the
+// display can render a cooldown indicator without touching the live Cooldown.
+struct CooldownState {
+    model::Position cell;
+    double progress;
+};
+
 // A piece sliding from one cell to another over time.
 class Motion {
 public:
@@ -80,6 +88,11 @@ public:
 
     std::uint32_t pieceId() const { return pieceId_; }
     model::Position cell() const { return cell_; }
+
+    // Fraction of the rest completed, clamped to [0, 1].
+    double progress() const;
+    // A frozen, read-only view of this cooldown for callers outside realtime.
+    CooldownState state() const { return {cell_, progress()}; }
 
     void advance(int deltaMs);
     bool hasElapsed() const { return elapsedMs_ >= cooldownMs; }

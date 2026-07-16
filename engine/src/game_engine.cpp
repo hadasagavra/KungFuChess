@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -30,8 +31,12 @@ constexpr const char* reasonNoPiece = "no_piece";
 }  // namespace
 
 GameSnapshot::GameSnapshot(const Board& board, bool isOver,
-                           std::vector<realtime::MotionState> motions)
-    : board_(board), isOver_(isOver), motions_(std::move(motions)) {}
+                           std::vector<realtime::MotionState> motions,
+                           std::vector<realtime::CooldownState> cooldowns)
+    : board_(board),
+      isOver_(isOver),
+      motions_(std::move(motions)),
+      cooldowns_(std::move(cooldowns)) {}
 
 std::optional<Piece> GameSnapshot::pieceAt(Position cell) const {
     const std::shared_ptr<Piece> piece = board_.getPieceAt(cell);
@@ -107,8 +112,23 @@ void GameEngine::wait(int ms) {
     }
 }
 
+std::set<Position> GameEngine::legalDestinationsFor(Position source) const {
+    if (gameState_.isOver()) {
+        return {};
+    }
+    // Only an idle piece in a live game can start a move, so only then does a
+    // highlight represent a move the engine would accept. The pattern itself
+    // comes from the piece's rule -- reused, not reimplemented.
+    const std::shared_ptr<Piece> piece = board_.getPieceAt(source);
+    if (!piece || piece->getState() != State::Idle) {
+        return {};
+    }
+    return rules::ruleFor(piece->getKind()).legalDestinations(board_, *piece);
+}
+
 GameSnapshot GameEngine::getSnapshot() const {
-    return GameSnapshot{board_, gameState_.isOver(), arbiter_.activeMotions()};
+    return GameSnapshot{board_, gameState_.isOver(), arbiter_.activeMotions(),
+                        arbiter_.activeCooldowns()};
 }
 
 bool GameEngine::isGameOver() const { return gameState_.isOver(); }
