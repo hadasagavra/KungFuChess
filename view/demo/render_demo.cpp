@@ -63,7 +63,8 @@ int main(int argc, char** argv) {
 
         view.open();
         while (view.isOpen()) {
-            view.render(snapshot);
+            // Static demo: a zero delta holds every piece on its first frame.
+            view.render(snapshot, 0);
             if (auto px = view.pollClick()) {
                 if (auto cell = mapper.toCell(px->x, px->y)) {
                     std::cout << "cell: row=" << cell->row

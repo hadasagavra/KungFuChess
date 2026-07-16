@@ -83,10 +83,12 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
     auto last = std::chrono::steady_clock::now();
     while (view.isOpen()) {
         const auto now = std::chrono::steady_clock::now();
-        engine.wait(elapsedMsSince(last, now));
+        const int deltaMs = elapsedMsSince(last, now);
+        engine.wait(deltaMs);
         last = now;
 
-        view.render(kfc::view::buildSnapshot(engine.getSnapshot(), cellPx));
+        view.render(kfc::view::buildSnapshot(engine.getSnapshot(), cellPx),
+                    deltaMs);
 
         if (std::optional<kfc::view::PixelPoint> click = view.pollClick()) {
             controller.handleClick(click->x, click->y);

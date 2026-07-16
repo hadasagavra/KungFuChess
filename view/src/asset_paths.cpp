@@ -43,10 +43,21 @@ std::string stateFolder(model::State state) {
     return "idle";
 }
 
+std::string stateDir(const std::string& assetsRoot, model::Kind kind,
+                     model::Color color, model::State state) {
+    return assetsRoot + "/pieces2/" + pieceCode(kind, color) + "/states/" +
+           stateFolder(state);
+}
+
+std::string configPath(const std::string& assetsRoot, model::Kind kind,
+                       model::Color color, model::State state) {
+    return stateDir(assetsRoot, kind, color, state) + "/config.json";
+}
+
 std::string spriteFramePath(const std::string& assetsRoot, model::Kind kind,
                             model::Color color, model::State state, int frame) {
-    return assetsRoot + "/pieces2/" + pieceCode(kind, color) + "/states/" +
-           stateFolder(state) + "/sprites/" + std::to_string(frame) + ".png";
+    return stateDir(assetsRoot, kind, color, state) + "/sprites/" +
+           std::to_string(frame) + ".png";
 }
 
 }  // namespace kfc::view

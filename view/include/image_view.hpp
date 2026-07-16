@@ -3,6 +3,8 @@
 #include <optional>
 
 #include "img.hpp"
+#include "view/include/animation_config_store.hpp"
+#include "view/include/animator.hpp"
 #include "view/include/game_snapshot.hpp"
 #include "view/include/render_config.hpp"
 #include "view/include/renderer.hpp"
@@ -30,8 +32,9 @@ public:
     bool isOpen() const;
 
     // Render one frame of the snapshot into the persistent window, without
-    // blocking. Call once per loop iteration after open().
-    void render(const GameSnapshot& snapshot);
+    // blocking. deltaMs is the wall-clock time since the previous render, which
+    // advances the sprite animations. Call once per loop iteration after open().
+    void render(const GameSnapshot& snapshot, int deltaMs);
 
     // The last unread click, in frame pixel coordinates, or std::nullopt if
     // none. Display only: returns a pixel, never a cell -- mapping a pixel to a
@@ -40,6 +43,8 @@ public:
 
 private:
     Renderer renderer_;
+    AnimationConfigStore configStore_;  // disk-backed animation configs
+    Animator animator_;                 // display-side animation state machine
     Img window_;  // owns the persistent window + raw click capture
 };
 

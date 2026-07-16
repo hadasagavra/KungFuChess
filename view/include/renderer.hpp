@@ -21,7 +21,8 @@ public:
 
 private:
     Img loadBoardBackground(int widthCells, int heightCells) const;
-    Img loadSprite(model::Kind kind, model::Color color, model::State state) const;
+    Img loadSprite(model::Kind kind, model::Color color, model::State state,
+                   int frame) const;
     void drawPieceOn(Img& frame, const PieceView& piece) const;
 
     RenderConfig config_;

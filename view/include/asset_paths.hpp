@@ -11,6 +11,14 @@ namespace kfc::view {
 // "idle") so no asset-path literals are duplicated across the view.
 std::string pieceCode(model::Kind kind, model::Color color);
 std::string stateFolder(model::State state);
+
+// Directory holding one piece-state's assets: assetsRoot/pieces2/<code>/states/
+// <folder>. Both the sprite path and the config path derive from it, so the
+// on-disk layout is spelled out in exactly one place.
+std::string stateDir(const std::string& assetsRoot, model::Kind kind,
+                     model::Color color, model::State state);
+std::string configPath(const std::string& assetsRoot, model::Kind kind,
+                       model::Color color, model::State state);
 std::string spriteFramePath(const std::string& assetsRoot, model::Kind kind,
                             model::Color color, model::State state, int frame);
 

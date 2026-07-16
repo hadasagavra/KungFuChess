@@ -6,7 +6,13 @@
 
 namespace kfc::view {
 
-ImageView::ImageView(RenderConfig config) : renderer_(std::move(config)) {}
+ImageView::ImageView(RenderConfig config)
+    : renderer_(config),
+      configStore_(config.assetsRoot),
+      animator_([this](model::Kind kind, model::Color color,
+                       model::State state) {
+          return configStore_.configFor(kind, color, state);
+      }) {}
 
 void ImageView::show(const GameSnapshot& snapshot) const {
     Img frame = renderer_.renderFrame(snapshot);
@@ -17,8 +23,8 @@ void ImageView::open() { window_.openWindow(); }
 
 bool ImageView::isOpen() const { return window_.isWindowOpen(); }
 
-void ImageView::render(const GameSnapshot& snapshot) {
-    Img frame = renderer_.renderFrame(snapshot);
+void ImageView::render(const GameSnapshot& snapshot, int deltaMs) {
+    Img frame = renderer_.renderFrame(animator_.animate(snapshot, deltaMs));
     window_.showFrame(frame);
 }
 

@@ -28,7 +28,7 @@ inline GameSnapshot buildSnapshot(const engine::GameSnapshot& state, int cellPx)
             }
             snapshot.pieces.push_back(
                 PieceView{piece->getKind(), piece->getColor(), piece->getState(),
-                          PixelPoint{col * cellPx, row * cellPx}});
+                          PixelPoint{col * cellPx, row * cellPx}, piece->getId()});
         }
     }
     return snapshot;
