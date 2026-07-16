@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "model/include/board.hpp"
@@ -28,8 +29,9 @@ constexpr const char* reasonNoPiece = "no_piece";
 
 }  // namespace
 
-GameSnapshot::GameSnapshot(const Board& board, bool isOver)
-    : board_(board), isOver_(isOver) {}
+GameSnapshot::GameSnapshot(const Board& board, bool isOver,
+                           std::vector<realtime::MotionState> motions)
+    : board_(board), isOver_(isOver), motions_(std::move(motions)) {}
 
 std::optional<Piece> GameSnapshot::pieceAt(Position cell) const {
     const std::shared_ptr<Piece> piece = board_.getPieceAt(cell);
@@ -106,7 +108,7 @@ void GameEngine::wait(int ms) {
 }
 
 GameSnapshot GameEngine::getSnapshot() const {
-    return GameSnapshot{board_, gameState_.isOver()};
+    return GameSnapshot{board_, gameState_.isOver(), arbiter_.activeMotions()};
 }
 
 bool GameEngine::isGameOver() const { return gameState_.isOver(); }

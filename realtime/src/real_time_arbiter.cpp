@@ -16,6 +16,15 @@ using model::State;
 
 RealTimeArbiter::RealTimeArbiter(model::Board& board) : board_(board) {}
 
+std::vector<MotionState> RealTimeArbiter::activeMotions() const {
+    std::vector<MotionState> motions;
+    motions.reserve(active_.size());
+    for (const Motion& motion : active_) {
+        motions.push_back(motion.state());
+    }
+    return motions;
+}
+
 bool RealTimeArbiter::startMotion(Position from, Position to) {
     if (hasActiveMotion()) {
         return false;

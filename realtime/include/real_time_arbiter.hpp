@@ -29,6 +29,10 @@ public:
 
     bool hasActiveMotion() const { return !active_.empty(); }
 
+    // A read-only view of the in-flight slides, for callers (e.g. the display)
+    // that need each motion's from/to/progress without seeing the live Motions.
+    std::vector<MotionState> activeMotions() const;
+
     // Begin a slide / a jump. Returns false if it cannot start.
     bool startMotion(model::Position from, model::Position to);
     bool startJump(model::Position cell);

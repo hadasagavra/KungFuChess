@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "model/include/board.hpp"
 #include "model/include/game_state.hpp"
@@ -22,19 +23,24 @@ struct MoveResult {
 
 // A read-only view of the logical game state for the renderer and BoardPrinter.
 // It delegates width/height/pieceAt to the live Board and carries the game-over
-// flag. Lightweight view: use it within the lifetime of the engine's board.
+// flag and a frozen list of in-flight motions (so the display can interpolate a
+// sliding piece's position). Lightweight view: use it within the lifetime of the
+// engine's board.
 class GameSnapshot {
 public:
-    GameSnapshot(const model::Board& board, bool isOver);
+    GameSnapshot(const model::Board& board, bool isOver,
+                 std::vector<realtime::MotionState> motions = {});
 
     int width() const { return board_.width(); }
     int height() const { return board_.height(); }
     bool isOver() const { return isOver_; }
     std::optional<model::Piece> pieceAt(model::Position cell) const;
+    const std::vector<realtime::MotionState>& motions() const { return motions_; }
 
 private:
     const model::Board& board_;
     bool isOver_;
+    std::vector<realtime::MotionState> motions_;
 };
 
 // Application-service coordinator and public command boundary. It holds the game

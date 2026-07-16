@@ -17,6 +17,15 @@ constexpr int cooldownMs = 1000;
 // Travel time for a slide: cell-step (Chebyshev) count times squareTravelMs.
 int travelDurationMs(model::Position from, model::Position to);
 
+// A read-only snapshot of one in-flight slide: where it started, where it is
+// bound, and how far along it is (0..1). It carries no behavior, so the display
+// can read a motion's progress without touching the live, mutating Motion.
+struct MotionState {
+    model::Position from;
+    model::Position to;
+    double progress;
+};
+
 // A piece sliding from one cell to another over time.
 class Motion {
 public:
@@ -26,6 +35,11 @@ public:
     model::Position to() const { return to_; }
     int durationMs() const { return durationMs_; }
     int elapsedMs() const { return elapsedMs_; }
+
+    // Fraction of the slide completed, clamped to [0, 1].
+    double progress() const;
+    // A frozen, read-only view of this motion for callers outside realtime.
+    MotionState state() const { return {from_, to_, progress()}; }
 
     void advance(int deltaMs);
     bool hasArrived() const { return elapsedMs_ >= durationMs_; }

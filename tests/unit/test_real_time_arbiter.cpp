@@ -16,6 +16,8 @@ using kfc::model::Piece;
 using kfc::model::Position;
 using kfc::model::State;
 using kfc::realtime::ArrivalReport;
+using kfc::realtime::Motion;
+using kfc::realtime::MotionState;
 using kfc::realtime::RealTimeArbiter;
 
 namespace {
@@ -50,6 +52,37 @@ TEST_CASE("A motion moves the piece only on arrival, then cools it down") {
     CHECK(board.getPieceAt(Position{4, 4}).get() == nullptr);
     CHECK(rook->getState() == State::Resting);  // cooldown, not idle
     CHECK_FALSE(arbiter.hasActiveMotion());
+}
+
+TEST_CASE("Motion reports its travel progress, clamped to [0,1]") {
+    Motion motion{Position{4, 4}, Position{4, 6}};  // 2 cells = 2000ms
+    CHECK(motion.progress() == doctest::Approx(0.0));
+    motion.advance(500);
+    CHECK(motion.progress() == doctest::Approx(0.25));
+    motion.advance(1500);
+    CHECK(motion.progress() == doctest::Approx(1.0));
+    motion.advance(1000);  // past arrival stays clamped
+    CHECK(motion.progress() == doctest::Approx(1.0));
+}
+
+TEST_CASE("activeMotions exposes each in-flight slide's from/to/progress") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    RealTimeArbiter arbiter{board};
+
+    CHECK(arbiter.activeMotions().empty());
+
+    arbiter.startMotion(Position{4, 4}, Position{0, 4});  // 4 cells = 4000ms
+    arbiter.advance(1000);                                // quarter of the way
+
+    const std::vector<MotionState> motions = arbiter.activeMotions();
+    REQUIRE(motions.size() == 1);
+    CHECK(motions[0].from == Position{4, 4});
+    CHECK(motions[0].to == Position{0, 4});
+    CHECK(motions[0].progress == doctest::Approx(0.25));
+
+    arbiter.advance(3000);  // arrive
+    CHECK(arbiter.activeMotions().empty());
 }
 
 TEST_CASE("Only one motion may be active at a time") {

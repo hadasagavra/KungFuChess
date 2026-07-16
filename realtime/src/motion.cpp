@@ -1,5 +1,6 @@
 #include "realtime/include/motion.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 
 namespace kfc::realtime {
@@ -20,6 +21,14 @@ int travelDurationMs(model::Position from, model::Position to) {
 
 Motion::Motion(model::Position from, model::Position to)
     : from_(from), to_(to), durationMs_(travelDurationMs(from, to)) {}
+
+double Motion::progress() const {
+    if (durationMs_ <= 0) {
+        return 1.0;
+    }
+    const double fraction = static_cast<double>(elapsedMs_) / durationMs_;
+    return std::clamp(fraction, 0.0, 1.0);
+}
 
 void Motion::advance(int deltaMs) { elapsedMs_ += deltaMs; }
 

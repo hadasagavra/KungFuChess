@@ -59,6 +59,23 @@ TEST_CASE("buildSnapshot places a piece at its pixel position") {
     CHECK(piece.position.y == 100);
 }
 
+TEST_CASE("buildSnapshot slides a moving piece between its cells") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{1, 2});
+    GameEngine engine{board};
+
+    REQUIRE(engine.requestMove(Position{1, 2}, Position{1, 3}).isAccepted);
+    engine.wait(500);  // halfway through the 1000ms one-cell slide
+
+    const GameSnapshot snapshot = buildSnapshot(engine.getSnapshot(), cellPx);
+    REQUIRE(snapshot.pieces.size() == 1);
+    const PieceView& piece = snapshot.pieces.front();
+    CHECK(piece.state == State::Moving);
+    // Halfway between col 2 (x=200) and col 3 (x=300); row 1 unchanged.
+    CHECK(piece.position.x == 250);
+    CHECK(piece.position.y == 100);
+}
+
 TEST_CASE("buildSnapshot reports every occupied cell") {
     Board board{8, 8};
     place(board, 1, Color::White, Kind::King, Position{7, 4});
