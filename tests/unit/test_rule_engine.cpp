@@ -13,6 +13,7 @@ using kfc::model::Color;
 using kfc::model::Kind;
 using kfc::model::Piece;
 using kfc::model::Position;
+using kfc::rules::MoveReason;
 using kfc::rules::MoveValidation;
 using kfc::rules::RuleEngine;
 
@@ -35,12 +36,12 @@ TEST_CASE("validateMove rejects moves outside the board") {
     SUBCASE("source out of bounds") {
         const MoveValidation r = engine.validateMove(board, Position{-1, 4}, Position{4, 4});
         CHECK_FALSE(r.isValid);
-        CHECK(r.reason == "outside_board");
+        CHECK(r.reason == MoveReason::OutsideBoard);
     }
     SUBCASE("destination out of bounds") {
         const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{8, 8});
         CHECK_FALSE(r.isValid);
-        CHECK(r.reason == "outside_board");
+        CHECK(r.reason == MoveReason::OutsideBoard);
     }
 }
 
@@ -51,7 +52,7 @@ TEST_CASE("validateMove rejects an empty source cell") {
 
     const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{4, 5});
     CHECK_FALSE(r.isValid);
-    CHECK(r.reason == "empty_source");
+    CHECK(r.reason == MoveReason::EmptySource);
 }
 
 TEST_CASE("validateMove rejects a friendly destination") {
@@ -62,7 +63,7 @@ TEST_CASE("validateMove rejects a friendly destination") {
 
     const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{4, 6});
     CHECK_FALSE(r.isValid);
-    CHECK(r.reason == "friendly_destination");
+    CHECK(r.reason == MoveReason::FriendlyDestination);
 }
 
 TEST_CASE("validateMove rejects a geometrically illegal move") {
@@ -73,7 +74,7 @@ TEST_CASE("validateMove rejects a geometrically illegal move") {
         place(board, 1, Color::White, Kind::Rook, Position{4, 4});
         const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{5, 5});
         CHECK_FALSE(r.isValid);
-        CHECK(r.reason == "illegal_piece_move");
+        CHECK(r.reason == MoveReason::IllegalPieceMove);
     }
     SUBCASE("enemy on an unreachable diagonal for a rook") {
         Board board{8, 8};
@@ -81,7 +82,7 @@ TEST_CASE("validateMove rejects a geometrically illegal move") {
         place(board, 2, Color::Black, Kind::Pawn, Position{5, 5});
         const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{5, 5});
         CHECK_FALSE(r.isValid);
-        CHECK(r.reason == "illegal_piece_move");
+        CHECK(r.reason == MoveReason::IllegalPieceMove);
     }
 }
 
@@ -93,7 +94,7 @@ TEST_CASE("validateMove accepts legal moves and captures") {
         place(board, 1, Color::White, Kind::Rook, Position{4, 4});
         const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{4, 7});
         CHECK(r.isValid);
-        CHECK(r.reason == "ok");
+        CHECK(r.reason == MoveReason::Ok);
     }
     SUBCASE("rook captures an enemy inline") {
         Board board{8, 8};
@@ -101,7 +102,7 @@ TEST_CASE("validateMove accepts legal moves and captures") {
         place(board, 2, Color::Black, Kind::Pawn, Position{4, 6});
         const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{4, 6});
         CHECK(r.isValid);
-        CHECK(r.reason == "ok");
+        CHECK(r.reason == MoveReason::Ok);
     }
 }
 
@@ -114,11 +115,11 @@ TEST_CASE("validateMove dispatches to the correct rule per Kind") {
         return engine.validateMove(board, from, to);
     };
 
-    CHECK(okMove(Kind::Knight, Position{4, 4}, Position{6, 5}).reason == "ok");
-    CHECK(okMove(Kind::Bishop, Position{4, 4}, Position{6, 6}).reason == "ok");
-    CHECK(okMove(Kind::Queen, Position{4, 4}, Position{0, 0}).reason == "ok");
-    CHECK(okMove(Kind::King, Position{4, 4}, Position{4, 5}).reason == "ok");
-    CHECK(okMove(Kind::Pawn, Position{1, 4}, Position{0, 4}).reason == "ok");
+    CHECK(okMove(Kind::Knight, Position{4, 4}, Position{6, 5}).reason == MoveReason::Ok);
+    CHECK(okMove(Kind::Bishop, Position{4, 4}, Position{6, 6}).reason == MoveReason::Ok);
+    CHECK(okMove(Kind::Queen, Position{4, 4}, Position{0, 0}).reason == MoveReason::Ok);
+    CHECK(okMove(Kind::King, Position{4, 4}, Position{4, 5}).reason == MoveReason::Ok);
+    CHECK(okMove(Kind::Pawn, Position{1, 4}, Position{0, 4}).reason == MoveReason::Ok);
 }
 
 TEST_CASE("validateMove applies its checks in the specified order") {
@@ -127,20 +128,20 @@ TEST_CASE("validateMove applies its checks in the specified order") {
     SUBCASE("bounds is checked before empty source") {
         Board board{8, 8};
         const MoveValidation r = engine.validateMove(board, Position{9, 9}, Position{4, 4});
-        CHECK(r.reason == "outside_board");
+        CHECK(r.reason == MoveReason::OutsideBoard);
     }
     SUBCASE("empty source is checked before friendly destination") {
         Board board{8, 8};
         place(board, 1, Color::White, Kind::Pawn, Position{0, 0});
         const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{0, 0});
-        CHECK(r.reason == "empty_source");
+        CHECK(r.reason == MoveReason::EmptySource);
     }
     SUBCASE("friendly destination is checked before piece rules") {
         Board board{8, 8};
         place(board, 1, Color::White, Kind::Rook, Position{4, 4});
         place(board, 2, Color::White, Kind::Pawn, Position{6, 6});  // unreachable diagonal
         const MoveValidation r = engine.validateMove(board, Position{4, 4}, Position{6, 6});
-        CHECK(r.reason == "friendly_destination");
+        CHECK(r.reason == MoveReason::FriendlyDestination);
     }
 }
 

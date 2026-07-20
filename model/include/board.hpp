@@ -5,6 +5,7 @@
 
 #include "model/include/piece.hpp"
 #include "model/include/position.hpp"
+#include "model/include/board_errors.hpp" // הוספת קובץ השגיאות החדש
 
 namespace kfc::model {
 
@@ -13,8 +14,7 @@ namespace kfc::model {
 // the grid and each piece's own cell in sync (single source of truth). It has
 // ZERO knowledge of chess rules: movePiece assumes validation already occurred.
 //
-// width = number of columns, height = number of rows; a Position{row, col}
-// maps to row * width + col.
+// Throws OutOfBoundsError, CellOccupiedError, or CellEmptyError on contract violations.
 class Board {
 public:
     Board(int width, int height);

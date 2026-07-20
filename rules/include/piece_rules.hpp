@@ -2,7 +2,7 @@
 
 #include <optional>
 #include <set>
-
+#include <stdexcept>
 #include "model/include/board.hpp"
 #include "model/include/piece.hpp"
 #include "model/include/position.hpp"
@@ -64,9 +64,11 @@ public:
         const model::Board& board, const model::Piece& piece) const override;
 };
 
+const PieceRules& ruleFor(model::Kind kind);
 // If the piece is a pawn that has reached its promotion row, the kind it should
 // become (Queen); otherwise std::nullopt. A rules concern the engine applies on
 // arrival.
+
 std::optional<model::Kind> promotedKind(const model::Board& board,
                                         const model::Piece& piece);
 

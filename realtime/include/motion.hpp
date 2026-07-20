@@ -65,7 +65,6 @@ private:
 class Jump {
 public:
     explicit Jump(model::Position cell);
-
     model::Position cell() const { return cell_; }
 
     void advance(int deltaMs);

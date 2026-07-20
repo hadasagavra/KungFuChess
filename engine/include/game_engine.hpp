@@ -14,12 +14,13 @@
 
 namespace kfc::engine {
 
-// The outcome of a move/jump request. reason is always present: "ok" when
-// accepted, otherwise a stable token ("game_over", "motion_in_progress",
-// "not_idle", "no_piece", or a forwarded RuleEngine reason).
+// The outcome of a move/jump request. reason is always present: MoveReason::Ok
+// when accepted, otherwise the real-time reason the engine itself raised
+// (GameOver, MotionInProgress, NotIdle, NoPiece) or a forwarded RuleEngine
+// reason.
 struct MoveResult {
     bool isAccepted;
-    std::string reason;
+    rules::MoveReason reason;
 };
 
 // A read-only view of the logical game state for the renderer and BoardPrinter.

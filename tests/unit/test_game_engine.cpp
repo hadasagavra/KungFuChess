@@ -18,6 +18,7 @@ using kfc::model::Color;
 using kfc::model::Kind;
 using kfc::model::Piece;
 using kfc::model::Position;
+using kfc::rules::MoveReason;
 
 namespace {
 
@@ -43,7 +44,7 @@ TEST_CASE("requestMove accepts a legal move") {
     const MoveResult result = engine.requestMove(Position{4, 4}, Position{4, 5});
 
     CHECK(result.isAccepted);
-    CHECK(result.reason == "ok");
+    CHECK(result.reason == MoveReason::Ok);
 }
 
 TEST_CASE("requestMove rejects a second move while one is in progress") {
@@ -56,7 +57,7 @@ TEST_CASE("requestMove rejects a second move while one is in progress") {
 
     const MoveResult result = engine.requestMove(Position{0, 0}, Position{0, 1});
     CHECK_FALSE(result.isAccepted);
-    CHECK(result.reason == "motion_in_progress");
+    CHECK(result.reason == MoveReason::MotionInProgress);
 }
 
 TEST_CASE("requestMove forwards the RuleEngine rejection reason") {
@@ -67,12 +68,12 @@ TEST_CASE("requestMove forwards the RuleEngine rejection reason") {
     SUBCASE("illegal geometry") {
         const MoveResult result = engine.requestMove(Position{4, 4}, Position{5, 5});
         CHECK_FALSE(result.isAccepted);
-        CHECK(result.reason == "illegal_piece_move");
+        CHECK(result.reason == MoveReason::IllegalPieceMove);
     }
     SUBCASE("empty source") {
         const MoveResult result = engine.requestMove(Position{2, 2}, Position{2, 3});
         CHECK_FALSE(result.isAccepted);
-        CHECK(result.reason == "empty_source");
+        CHECK(result.reason == MoveReason::EmptySource);
     }
 }
 
@@ -107,7 +108,7 @@ TEST_CASE("a piece must cool down before it can move again") {
 
     const MoveResult duringCooldown = engine.requestMove(Position{4, 5}, Position{4, 6});
     CHECK_FALSE(duringCooldown.isAccepted);
-    CHECK(duringCooldown.reason == "not_idle");
+    CHECK(duringCooldown.reason == MoveReason::NotIdle);
 
     engine.wait(cooldownMs);  // cooldown elapses -> idle
     CHECK(engine.requestMove(Position{4, 5}, Position{4, 6}).isAccepted);
@@ -140,12 +141,12 @@ TEST_CASE("requestJump keeps the piece in place and enforces idleness") {
         REQUIRE(engine.requestJump(Position{4, 4}).isAccepted);  // now airborne
         const MoveResult again = engine.requestJump(Position{4, 4});
         CHECK_FALSE(again.isAccepted);
-        CHECK(again.reason == "not_idle");
+        CHECK(again.reason == MoveReason::NotIdle);
     }
     SUBCASE("cannot jump an empty cell") {
         const MoveResult empty = engine.requestJump(Position{0, 0});
         CHECK_FALSE(empty.isAccepted);
-        CHECK(empty.reason == "no_piece");
+        CHECK(empty.reason == MoveReason::NoPiece);
     }
 }
 
@@ -163,7 +164,7 @@ TEST_CASE("capturing the king ends the game") {
 
     const MoveResult afterOver = engine.requestMove(Position{4, 6}, Position{4, 7});
     CHECK_FALSE(afterOver.isAccepted);
-    CHECK(afterOver.reason == "game_over");
+    CHECK(afterOver.reason == MoveReason::GameOver);
 }
 
 TEST_CASE("a non-king capture does not end the game") {

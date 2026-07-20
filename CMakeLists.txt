@@ -60,21 +60,48 @@ set(OPENCV_LIB "$<IF:$<CONFIG:Debug>,${OPENCV_DIR}/bin/opencv_world451d.lib,${OP
 set(OPENCV_DLL "$<IF:$<CONFIG:Debug>,${OPENCV_DIR}/bin/opencv_world451d.dll,${OPENCV_DIR}/bin/opencv_world451.dll>")
 
 # ---------------------------------------------------------------------------
-# kfc_view: the GUI output layer (view/) plus the OpenCV wrapper (Img bitmap +
-# MouseWindow window/input). This is the ONLY target that links OpenCV, keeping
-# the graphics stack out of Business
-# Logic. Links kfc_lib for the domain types a GameSnapshot references. OpenCV's
-# headers are added as SYSTEM includes so their warnings stay out of our /W4.
+# The view/ module is one architectural layer but splits into two build targets,
+# because only half of it needs the graphics stack:
+#
+#   kfc_view_core -- the pure half: the GUI<-Logic seam, the animation state
+#                    machine, the asset-path scheme, the config loader. No
+#                    OpenCV, no Img, so the unit tests can link it directly.
+#   kfc_view      -- the drawing half: Renderer + ImageView + the Img/MouseWindow
+#                    wrapper. The ONLY target that links OpenCV.
+#
+# The dependency runs one way (kfc_view -> kfc_view_core), so the graphics stack
+# is unreachable from the core and from the tests. That makes "graphics only via
+# Img, never in the seam" a build-enforced rule rather than a convention: a core
+# source that reaches for img.hpp or opencv2/ fails to compile, since neither
+# include directory is on kfc_view_core's path.
+#
+# Sources are listed explicitly rather than globbed: which side a file lands on
+# is a design decision about whether it may touch graphics, so it is stated here
+# instead of being inferred from a wildcard.
 # ---------------------------------------------------------------------------
-file(GLOB_RECURSE KFC_VIEW_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/*.cpp")
+add_library(kfc_view_core STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/animation_config_store.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/animator.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/asset_paths.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/scene_translator.cpp")
 
+# kfc_lib supplies the domain types a GameSnapshot references (Piece, Position,
+# the engine snapshot the seam reads). Nothing graphical is added here -- that
+# omission is the point of this target.
+target_link_libraries(kfc_view_core PUBLIC kfc_lib)
+
+# ---------------------------------------------------------------------------
+# kfc_view: the drawing half, plus the OpenCV wrapper (Img bitmap + MouseWindow
+# window/input). OpenCV's headers are added as SYSTEM includes so their warnings
+# stay out of our /W4.
+# ---------------------------------------------------------------------------
 add_library(kfc_view STATIC
-    ${KFC_VIEW_SOURCES}
+    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/image_view.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/renderer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img/img.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img/mouse_window.cpp")
 
-target_link_libraries(kfc_view PUBLIC kfc_lib "${OPENCV_LIB}")
+target_link_libraries(kfc_view PUBLIC kfc_view_core "${OPENCV_LIB}")
 target_include_directories(kfc_view PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img")
 target_include_directories(kfc_view SYSTEM PUBLIC "${OPENCV_INCLUDE_DIR}")
@@ -114,7 +141,10 @@ add_executable(unit_tests
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_main.cpp"
     ${TEST_SOURCES}
 )
-target_link_libraries(unit_tests PRIVATE kfc_lib)
+# kfc_view_core carries the pure view modules (the seam, the Animator, the asset
+# paths, the config loader). Linking it here keeps them under unit test without
+# dragging OpenCV into the test binary.
+target_link_libraries(unit_tests PRIVATE kfc_lib kfc_view_core)
 
 # doctest is vendored under third_party/. The tests include it two ways:
 #   "third_party/doctest/doctest.h"  (resolved via the repo root, already set)

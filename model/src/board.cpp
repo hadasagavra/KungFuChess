@@ -17,7 +17,7 @@ int Board::indexOf(Position pos) const {
 
 void Board::ensureInsideBounds(Position pos) const {
     if (!isInsideBounds(pos)) {
-        throw std::out_of_range("Board: position out of bounds");
+        throw OutOfBoundsError("Board: position out of bounds");
     }
 }
 
@@ -41,10 +41,10 @@ void Board::addPiece(std::shared_ptr<Piece> piece) {
     }
     const Position pos = piece->getCell();
     if (!isInsideBounds(pos)) {
-        throw std::invalid_argument("Board::addPiece: cell out of bounds");
+        throw OutOfBoundsError("Board::addPiece: cell out of bounds");
     }
     if (grid_[indexOf(pos)] != nullptr) {
-        throw std::invalid_argument("Board::addPiece: cell occupied");
+        throw CellOccupiedError("Board::addPiece: cell occupied");
     }
     grid_[indexOf(pos)] = std::move(piece);
 }
@@ -60,10 +60,10 @@ void Board::movePiece(Position from, Position to) {
 
     std::shared_ptr<Piece> piece = grid_[indexOf(from)];
     if (!piece) {
-        throw std::invalid_argument("Board::movePiece: origin cell is empty");
+        throw CellEmptyError("Board::movePiece: origin cell is empty");
     }
     if (grid_[indexOf(to)] != nullptr) {
-        throw std::invalid_argument("Board::movePiece: destination cell occupied");
+        throw CellOccupiedError("Board::movePiece: destination cell occupied");
     }
 
     grid_[indexOf(to)] = piece;
@@ -75,7 +75,7 @@ void Board::setPieceState(Position pos, State state) {
     ensureInsideBounds(pos);
     const std::shared_ptr<Piece> piece = grid_[indexOf(pos)];
     if (!piece) {
-        throw std::invalid_argument("Board::setPieceState: cell is empty");
+        throw CellEmptyError("Board::setPieceState: cell is empty");
     }
     piece->setState(state);
 }

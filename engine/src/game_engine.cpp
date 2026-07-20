@@ -20,16 +20,6 @@ using model::Piece;
 using model::Position;
 using model::State;
 
-namespace {
-
-constexpr const char* reasonOk = "ok";
-constexpr const char* reasonGameOver = "game_over";
-constexpr const char* reasonMotionInProgress = "motion_in_progress";
-constexpr const char* reasonNotIdle = "not_idle";
-constexpr const char* reasonNoPiece = "no_piece";
-
-}  // namespace
-
 GameSnapshot::GameSnapshot(const Board& board, bool isOver,
                            std::vector<realtime::MotionState> motions,
                            std::vector<realtime::CooldownState> cooldowns)
@@ -50,10 +40,10 @@ GameEngine::GameEngine(Board& board) : board_(board), arbiter_(board_) {}
 
 MoveResult GameEngine::requestMove(Position source, Position destination) {
     if (gameState_.isOver()) {
-        return {false, reasonGameOver};
+        return {false, rules::MoveReason::GameOver};
     }
     if (arbiter_.hasActiveMotion()) {
-        return {false, reasonMotionInProgress};
+        return {false, rules::MoveReason::MotionInProgress};
     }
 
     const rules::MoveValidation validation =
@@ -66,29 +56,29 @@ MoveResult GameEngine::requestMove(Position source, Position destination) {
     // start a new move.
     const std::shared_ptr<Piece> piece = board_.getPieceAt(source);
     if (piece->getState() != State::Idle) {
-        return {false, reasonNotIdle};
+        return {false, rules::MoveReason::NotIdle};
     }
 
     arbiter_.startMotion(source, destination);
-    return {true, reasonOk};
+    return {true, rules::MoveReason::Ok};
 }
 
 MoveResult GameEngine::requestJump(Position cell) {
     if (gameState_.isOver()) {
-        return {false, reasonGameOver};
+        return {false, rules::MoveReason::GameOver};
     }
 
     const std::shared_ptr<Piece> piece = board_.getPieceAt(cell);
     if (!piece) {
-        return {false, reasonNoPiece};
+        return {false, rules::MoveReason::NoPiece};
     }
     // A moving/resting/captured piece cannot jump.
     if (piece->getState() != State::Idle) {
-        return {false, reasonNotIdle};
+        return {false, rules::MoveReason::NotIdle};
     }
 
     arbiter_.startJump(cell);
-    return {true, reasonOk};
+    return {true, rules::MoveReason::Ok};
 }
 
 void GameEngine::wait(int ms) {

@@ -167,6 +167,25 @@ std::set<Position> PawnRules::legalDestinations(const Board& board,
     return destinations;
 }
 
+const PieceRules& ruleFor(Kind kind) {
+    static const RookRules rook;
+    static const BishopRules bishop;
+    static const QueenRules queen;
+    static const KnightRules knight;
+    static const KingRules king;
+    static const PawnRules pawn;
+
+    switch (kind) {
+        case Kind::Rook:   return rook;
+        case Kind::Bishop: return bishop;
+        case Kind::Queen:  return queen;
+        case Kind::Knight: return knight;
+        case Kind::King:   return king;
+        case Kind::Pawn:   return pawn;
+    }
+    throw std::invalid_argument("ruleFor: unknown piece kind");
+}
+
 std::optional<Kind> promotedKind(const Board& board, const Piece& piece) {
     if (piece.getKind() != Kind::Pawn) {
         return std::nullopt;
