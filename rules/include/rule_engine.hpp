@@ -18,7 +18,11 @@ enum class MoveReason {
     // Real-time / game outcomes, produced by the engine and carried through
     // engine::MoveResult (the engine forwards the legality reasons above as-is).
     GameOver,
+    // This piece is itself mid-journey: it cannot be sent somewhere new until it
+    // stops. Other pieces move in parallel, so this is never about the board as
+    // a whole.
     MotionInProgress,
+    // The piece is resting, airborne, or captured -- not ready for a command.
     NotIdle,
     NoPiece
 };

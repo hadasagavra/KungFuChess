@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <set>
 #include <string>
@@ -72,6 +73,11 @@ public:
     std::set<model::Position> legalDestinationsFor(model::Position source) const;
 
 private:
+    // The real-time gate shared by requestMove and requestJump: may this piece
+    // take a command right now? nullopt when it may, otherwise the exact reason.
+    std::optional<rules::MoveReason> realTimeBlockFor(
+        const std::shared_ptr<model::Piece>& piece) const;
+
     model::Board& board_;
     model::GameState gameState_;
     rules::RuleEngine ruleEngine_;

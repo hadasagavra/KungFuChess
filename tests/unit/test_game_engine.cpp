@@ -47,7 +47,7 @@ TEST_CASE("requestMove accepts a legal move") {
     CHECK(result.reason == MoveReason::Ok);
 }
 
-TEST_CASE("requestMove rejects a second move while one is in progress") {
+TEST_CASE("requestMove accepts moves for other pieces while one is under way") {
     Board board{8, 8};
     place(board, 1, Color::White, Kind::Rook, Position{4, 4});
     place(board, 2, Color::White, Kind::Rook, Position{0, 0});
@@ -56,8 +56,45 @@ TEST_CASE("requestMove rejects a second move while one is in progress") {
     REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
 
     const MoveResult result = engine.requestMove(Position{0, 0}, Position{0, 1});
+    CHECK(result.isAccepted);
+    CHECK(result.reason == MoveReason::Ok);
+}
+
+TEST_CASE("A piece already travelling takes no new command") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 7}).isAccepted);
+
+    SUBCASE("it cannot be sent somewhere else") {
+        const MoveResult result = engine.requestMove(Position{4, 4}, Position{0, 4});
+        CHECK_FALSE(result.isAccepted);
+        CHECK(result.reason == MoveReason::MotionInProgress);
+    }
+    SUBCASE("it cannot jump either") {
+        const MoveResult result = engine.requestJump(Position{4, 4});
+        CHECK_FALSE(result.isAccepted);
+        CHECK(result.reason == MoveReason::MotionInProgress);
+    }
+    SUBCASE("but once it has stopped and rested it may move again") {
+        engine.wait(3000);  // arrive
+        engine.wait(1000);  // rest
+        CHECK(engine.requestMove(Position{4, 7}, Position{4, 6}).isAccepted);
+    }
+}
+
+TEST_CASE("A resting piece is refused with NotIdle, not MotionInProgress") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
+    engine.wait(1000);  // arrives and begins its cooldown
+
+    const MoveResult result = engine.requestMove(Position{4, 5}, Position{4, 6});
     CHECK_FALSE(result.isAccepted);
-    CHECK(result.reason == MoveReason::MotionInProgress);
+    CHECK(result.reason == MoveReason::NotIdle);
 }
 
 TEST_CASE("requestMove forwards the RuleEngine rejection reason") {

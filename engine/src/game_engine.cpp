@@ -38,12 +38,23 @@ std::optional<Piece> GameSnapshot::pieceAt(Position cell) const {
 
 GameEngine::GameEngine(Board& board) : board_(board), arbiter_(board_) {}
 
+std::optional<rules::MoveReason> GameEngine::realTimeBlockFor(
+    const std::shared_ptr<Piece>& piece) const {
+    // A piece already under way may not be sent somewhere new -- it has to finish
+    // travelling first. Other pieces are free to move meanwhile.
+    if (piece->getState() == State::Moving) {
+        return rules::MoveReason::MotionInProgress;
+    }
+    // Resting (cooling down), airborne, or captured: not ready for a command.
+    if (piece->getState() != State::Idle) {
+        return rules::MoveReason::NotIdle;
+    }
+    return std::nullopt;
+}
+
 MoveResult GameEngine::requestMove(Position source, Position destination) {
     if (gameState_.isOver()) {
         return {false, rules::MoveReason::GameOver};
-    }
-    if (arbiter_.hasActiveMotion()) {
-        return {false, rules::MoveReason::MotionInProgress};
     }
 
     const rules::MoveValidation validation =
@@ -52,11 +63,9 @@ MoveResult GameEngine::requestMove(Position source, Position destination) {
         return {false, validation.reason};
     }
 
-    // The piece must be idle -- a resting (cooling-down) or airborne piece cannot
-    // start a new move.
     const std::shared_ptr<Piece> piece = board_.getPieceAt(source);
-    if (piece->getState() != State::Idle) {
-        return {false, rules::MoveReason::NotIdle};
+    if (const std::optional<rules::MoveReason> blocked = realTimeBlockFor(piece)) {
+        return {false, *blocked};
     }
 
     arbiter_.startMotion(source, destination);
@@ -72,9 +81,8 @@ MoveResult GameEngine::requestJump(Position cell) {
     if (!piece) {
         return {false, rules::MoveReason::NoPiece};
     }
-    // A moving/resting/captured piece cannot jump.
-    if (piece->getState() != State::Idle) {
-        return {false, rules::MoveReason::NotIdle};
+    if (const std::optional<rules::MoveReason> blocked = realTimeBlockFor(piece)) {
+        return {false, *blocked};
     }
 
     arbiter_.startJump(cell);

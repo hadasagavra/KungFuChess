@@ -1,6 +1,10 @@
 #include "realtime/include/real_time_arbiter.hpp"
 
+#include <algorithm>
+#include <cstddef>
+#include <iterator>
 #include <memory>
+#include <utility>
 
 #include "model/include/board.hpp"
 #include "model/include/piece.hpp"
@@ -34,8 +38,19 @@ std::vector<CooldownState> RealTimeArbiter::activeCooldowns() const {
     return cooldowns;
 }
 
+bool RealTimeArbiter::hasMotionFor(Position cell) const {
+    for (const Motion& motion : active_) {
+        if (motion.currentCell() == cell) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool RealTimeArbiter::startMotion(Position from, Position to) {
-    if (hasActiveMotion()) {
+    // Pieces travel in parallel; the only motion a new one may not join is
+    // another motion of the same piece.
+    if (hasMotionFor(from)) {
         return false;
     }
     active_.emplace_back(from, to);
@@ -55,52 +70,162 @@ bool RealTimeArbiter::startJump(Position cell) {
 std::vector<ArrivalReport> RealTimeArbiter::advance(int deltaMs) {
     std::vector<ArrivalReport> reports;
     tickCooldowns(deltaMs);
-
-    for (auto it = active_.begin(); it != active_.end();) {
-        it->advance(deltaMs);
-        if (it->hasArrived()) {
-            reports.push_back(resolveArrival(*it));
-            it = active_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
+    advanceMotions(deltaMs, reports);
     landAirborne(deltaMs, reports);
     return reports;
 }
 
-ArrivalReport RealTimeArbiter::resolveArrival(const Motion& motion) {
-    const Position from = motion.from();
-    const Position to = motion.to();
+void RealTimeArbiter::advanceMotions(int deltaMs,
+                                     std::vector<ArrivalReport>& reports) {
+    for (Motion& motion : active_) {
+        motion.advance(deltaMs);
+    }
 
-    const std::shared_ptr<Piece> arriver = board_.getPieceAt(from);
-    const std::shared_ptr<Piece> occupant = board_.getPieceAt(to);
-
-    // An enemy motion arriving at an airborne piece's cell: the airborne piece
-    // captures the arriver. Lift the airborne piece out; the arriver takes the
-    // cell for now and is removed when the jump lands.
-    if (occupant && occupant->getState() == State::Airborne && arriver &&
-        arriver->getColor() != occupant->getColor()) {
-        if (Jump* jump = jumpAt(to)) {
-            jump->lift(occupant);
+    // One tick can be long enough to carry a piece across several cells, and
+    // resolving one crossing can create another, so keep going until no motion
+    // is mid-crossing.
+    ResolvedFlags resolved(active_.size(), false);
+    while (true) {
+        const std::vector<std::size_t> crossings = crossingsByArrival(resolved);
+        if (crossings.empty()) {
+            break;
         }
-        board_.removePiece(to);
-        board_.movePiece(from, to);
-        startCooldown(board_.getPieceAt(to)->getId(), to);
-        return ArrivalReport{to, false, true};
+        for (const std::size_t index : crossings) {
+            // A crossing resolved earlier in this pass may have captured this
+            // piece before it got to move.
+            if (!resolved[index]) {
+                resolveEntry(index, resolved, reports);
+            }
+        }
+    }
+    dropResolved(resolved);
+}
+
+std::vector<std::size_t> RealTimeArbiter::crossingsByArrival(
+    const ResolvedFlags& resolved) const {
+    std::vector<std::size_t> crossings;
+    for (std::size_t index = 0; index < active_.size(); ++index) {
+        if (!resolved[index] && active_[index].isEnteringNextCell()) {
+            crossings.push_back(index);
+        }
+    }
+    // The bigger the overshoot, the longer ago the piece crossed. Sorting by it
+    // replays the crossings in the order they truly happened, which is what makes
+    // "the piece arriving later takes the one already there" hold even when both
+    // crossings land in the same tick. The sort is stable, so pieces that crossed
+    // at the very same instant keep the order their motions began in.
+    std::stable_sort(crossings.begin(), crossings.end(),
+                     [this](std::size_t a, std::size_t b) {
+                         return active_[a].arrivalOvershootMs() >
+                                active_[b].arrivalOvershootMs();
+                     });
+    return crossings;
+}
+
+EntryOutcome RealTimeArbiter::classifyEntry(const Motion& motion) const {
+    const std::shared_ptr<Piece> mover = board_.getPieceAt(motion.currentCell());
+    const std::shared_ptr<Piece> occupant = board_.getPieceAt(motion.nextCell());
+
+    if (!occupant) {
+        return EntryOutcome::Free;
+    }
+    if (occupant->getColor() == mover->getColor()) {
+        return EntryOutcome::BlockedByFriendly;
+    }
+    if (occupant->getState() == State::Airborne) {
+        return EntryOutcome::CapturedByAirborne;
+    }
+    return EntryOutcome::Capture;
+}
+
+void RealTimeArbiter::resolveEntry(std::size_t index, ResolvedFlags& resolved,
+                                   std::vector<ArrivalReport>& reports) {
+    Motion& motion = active_[index];
+    const EntryOutcome outcome = classifyEntry(motion);
+
+    if (outcome == EntryOutcome::BlockedByFriendly) {
+        // Two pieces of one colour never share a cell: the one that would have
+        // walked in second stops on the cell it already holds.
+        motion.stopHere();
+        finishMotion(index, false, resolved, reports);
+        return;
+    }
+    if (outcome == EntryOutcome::CapturedByAirborne) {
+        yieldToAirborne(index, resolved, reports);
+        return;
     }
 
-    bool kingCaptured = false;
-    if (occupant) {
-        kingCaptured = occupant->getKind() == Kind::King;
-        occupant->setState(State::Captured);
-        board_.removePiece(to);
-    }
-    board_.movePiece(from, to);
-    startCooldown(board_.getPieceAt(to)->getId(), to);
+    const bool kingCaptured = outcome == EntryOutcome::Capture &&
+                              captureAt(motion.nextCell(), resolved);
+    board_.movePiece(motion.currentCell(), motion.nextCell());
+    motion.completeStep();
 
-    return ArrivalReport{to, kingCaptured, true};
+    if (motion.isComplete()) {
+        finishMotion(index, kingCaptured, resolved, reports);
+    } else if (kingCaptured) {
+        // The game is already decided; the engine must not have to wait for the
+        // rest of this journey to hear about it.
+        reports.push_back(ArrivalReport{motion.currentCell(), true, true});
+    }
+}
+
+bool RealTimeArbiter::captureAt(Position cell, ResolvedFlags& resolved) {
+    const std::shared_ptr<Piece> victim = board_.getPieceAt(cell);
+    const bool wasKing = victim->getKind() == Kind::King;
+    victim->setState(State::Captured);
+    board_.removePiece(cell);
+
+    // A captured piece stops travelling, whether or not it was under way.
+    for (std::size_t index = 0; index < active_.size(); ++index) {
+        if (!resolved[index] && active_[index].currentCell() == cell) {
+            resolved[index] = true;
+        }
+    }
+    return wasKing;
+}
+
+void RealTimeArbiter::yieldToAirborne(std::size_t index, ResolvedFlags& resolved,
+                                      std::vector<ArrivalReport>& reports) {
+    Motion& motion = active_[index];
+    const Position cell = motion.nextCell();
+
+    // Lift the airborne piece out; the mover takes the cell for now and is
+    // removed when the jump lands.
+    const std::shared_ptr<Piece> jumper = board_.getPieceAt(cell);
+    if (Jump* jump = jumpAt(cell)) {
+        jump->lift(jumper);
+    }
+    board_.removePiece(cell);
+    board_.movePiece(motion.currentCell(), cell);
+    motion.completeStep();
+
+    startCooldown(board_.getPieceAt(cell)->getId(), cell);
+    reports.push_back(ArrivalReport{cell, false, true});
+    resolved[index] = true;
+}
+
+void RealTimeArbiter::finishMotion(std::size_t index, bool kingCaptured,
+                                   ResolvedFlags& resolved,
+                                   std::vector<ArrivalReport>& reports) {
+    const Position cell = active_[index].destination();
+    startCooldown(board_.getPieceAt(cell)->getId(), cell);
+    reports.push_back(ArrivalReport{cell, kingCaptured, true});
+    resolved[index] = true;
+}
+
+void RealTimeArbiter::dropResolved(const ResolvedFlags& resolved) {
+    std::size_t kept = 0;
+    for (std::size_t index = 0; index < active_.size(); ++index) {
+        if (resolved[index]) {
+            continue;
+        }
+        if (kept != index) {
+            active_[kept] = std::move(active_[index]);
+        }
+        ++kept;
+    }
+    active_.erase(active_.begin() + static_cast<std::ptrdiff_t>(kept),
+                  active_.end());
 }
 
 void RealTimeArbiter::landAirborne(int deltaMs,
