@@ -19,25 +19,28 @@ void ImageView::show(const GameSnapshot& snapshot) const {
     frame.show();
 }
 
-void ImageView::open() { window_.openWindow(); }
+void ImageView::open() { window_.emplace(); }
 
-bool ImageView::isOpen() const { return window_.isWindowOpen(); }
+bool ImageView::isOpen() const { return window_ && window_->isWindowOpen(); }
 
 void ImageView::render(const GameSnapshot& snapshot, int deltaMs) {
     Img frame = renderer_.renderFrame(animator_.animate(snapshot, deltaMs));
-    window_.showFrame(frame);
+    window_->showFrame(frame);
 }
 
-std::optional<PixelPoint> ImageView::pollClick() {
-    std::optional<ClickPos> click = window_.pollClick();
-    if (!click) return std::nullopt;
-    return PixelPoint{click->x, click->y};
-}
-
-std::optional<PixelPoint> ImageView::pollDoubleClick() {
-    std::optional<ClickPos> click = window_.pollDoubleClick();
-    if (!click) return std::nullopt;
-    return PixelPoint{click->x, click->y};
+std::vector<MouseAction> ImageView::takeMouseActions() {
+    if (!window_) {
+        return {};
+    }
+    std::vector<MouseAction> actions;
+    for (const MouseEvent& event : window_->takeMouseEvents()) {
+        actions.push_back(
+            MouseAction{event.type == MouseEvent::Type::DoubleClick
+                            ? MouseAction::Type::DoubleClick
+                            : MouseAction::Type::Click,
+                        PixelPoint{event.x, event.y}});
+    }
+    return actions;
 }
 
 }  // namespace kfc::view

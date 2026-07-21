@@ -1,19 +1,24 @@
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <iostream>
 #include <optional>
 #include <set>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "engine/include/game_engine.hpp"
 #include "input/include/board_mapper.hpp"
 #include "input/include/controller.hpp"
+#include "game_record/include/move_log.hpp"
+#include "game_record/include/score_board.hpp"
 #include "io/include/board_parser.hpp"
 #include "texttests/include/script_parser.hpp"
 #include "texttests/include/script_runner.hpp"
 #include "view/include/image_view.hpp"
 #include "view/include/render_config.hpp"
+#include "view/include/render_layout.hpp"
 #include "view/include/scene_translator.hpp"
 
 //https://github.com/hadasagavra/KungFuChess
@@ -39,6 +44,12 @@ const char* const startingBoardText =
 // paused/janky frame (or the first frame) from jumping the clock forward.
 constexpr int maxStepMs = 100;
 
+// Who is playing. Names are shown beside each player's moves table; no game rule
+// depends on them, so they stay here in the composition root rather than in the
+// Business Logic.
+const char* const whitePlayerName = "White";
+const char* const blackPlayerName = "Black";
+
 int elapsedMsSince(std::chrono::steady_clock::time_point last,
                    std::chrono::steady_clock::time_point now) {
     const auto ms =
@@ -53,7 +64,10 @@ int runScript(std::istream& in, std::ostream& out) {
     kfc::io::ParsedInput parsed = kfc::io::parseInput(in);
 
     kfc::engine::GameEngine engine{parsed.board};
-    kfc::input::BoardMapper mapper{parsed.board.width(), parsed.board.height()};
+    // The text harness draws nothing, so the board sits at the frame origin with
+    // no panels beside it.
+    kfc::input::BoardMapper mapper{parsed.board.width(), parsed.board.height(),
+                                   kfc::view::defaultCellPx, 0, 0};
     kfc::input::Controller controller{engine, mapper};
     kfc::texttests::ScriptRunner runner{controller, engine, out};
 
@@ -75,10 +89,28 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
     kfc::io::ParsedInput parsed = kfc::io::parseInput(boardText);
 
     kfc::engine::GameEngine engine{parsed.board};
-    kfc::input::BoardMapper mapper{parsed.board.width(), parsed.board.height()};
+
+    // The moves log and the score are Business Logic that listens: the engine
+    // publishes what happened and never learns who is recording it. Adding a
+    // listener here is the whole cost of a new feature of this kind.
+    kfc::game_record::MoveLog moveLog;
+    kfc::game_record::ScoreBoard scoreBoard;
+    engine.addObserver(moveLog);
+    engine.addObserver(scoreBoard);
+
+    const kfc::view::RenderConfig config =
+        kfc::view::defaultRenderConfig(assetsRoot, cellPx);
+    // One layout answer, shared: the renderer draws the board at this origin and
+    // the mapper reads clicks against it, so the two cannot disagree.
+    const kfc::view::FrameLayout layout = kfc::view::computeLayout(
+        config, parsed.board.width(), parsed.board.height());
+
+    kfc::input::BoardMapper mapper{parsed.board.width(), parsed.board.height(),
+                                   cellPx, layout.boardOrigin.x,
+                                   layout.boardOrigin.y};
     kfc::input::Controller controller{engine, mapper};
 
-    kfc::view::ImageView view{kfc::view::RenderConfig{assetsRoot, cellPx}};
+    kfc::view::ImageView view{config};
     view.open();
 
     auto last = std::chrono::steady_clock::now();
@@ -97,20 +129,31 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
                 controller.selection()) {
             highlights = engine.legalDestinationsFor(*selected);
         }
-        view.render(
-            kfc::view::buildSnapshot(engine.getSnapshot(), cellPx, highlights),
-            deltaMs);
+        const kfc::engine::GameSnapshot state = engine.getSnapshot();
+        const kfc::view::SceneInput scene{
+            state,      moveLog,          scoreBoard,
+            highlights, whitePlayerName,  blackPlayerName};
+        view.render(kfc::view::buildSnapshot(scene, config, layout), deltaMs);
 
         // A double-click requests a jump; a single click drives the ordinary
-        // select/move flow. Drain both channels each frame, but let a jump win:
-        // OpenCV emits the opening LBUTTONDOWN as well, and acting on it too
-        // would leave a stray selection on the just-jumped piece.
-        const std::optional<kfc::view::PixelPoint> dbl = view.pollDoubleClick();
-        const std::optional<kfc::view::PixelPoint> click = view.pollClick();
-        if (dbl) {
-            controller.handleJump(dbl->x, dbl->y);
-        } else if (click) {
-            controller.handleClick(click->x, click->y);
+        // select/move flow. A double-click also delivers the opening click that
+        // began it, so a click immediately followed by a double-click on the same
+        // spot is dropped -- acting on it too would leave a stray selection on
+        // the piece that just jumped.
+        const std::vector<kfc::view::MouseAction> actions = view.takeMouseActions();
+        for (std::size_t i = 0; i < actions.size(); ++i) {
+            const kfc::view::MouseAction& action = actions[i];
+            if (action.type == kfc::view::MouseAction::Type::DoubleClick) {
+                controller.handleJump(action.position.x, action.position.y);
+                continue;
+            }
+            const bool opensDoubleClick =
+                i + 1 < actions.size() &&
+                actions[i + 1].type == kfc::view::MouseAction::Type::DoubleClick &&
+                actions[i + 1].position == action.position;
+            if (!opensDoubleClick) {
+                controller.handleClick(action.position.x, action.position.y);
+            }
         }
     }
     return 0;

@@ -9,6 +9,7 @@
 #include "view/include/game_snapshot.hpp"
 #include "view/include/image_view.hpp"
 #include "view/include/render_config.hpp"
+#include "view/include/render_layout.hpp"
 #include "view/include/renderer.hpp"
 
 using namespace kfc;
@@ -24,15 +25,37 @@ const model::Kind backRank[8] = {
 // Build a standard 8x8 starting-position snapshot. This plays the trivial role
 // of the seam: it turns each cell (row, col) into a pixel position using cellPx.
 // Black occupies the top rows (0, 1); White the bottom rows (6, 7).
-view::GameSnapshot startingPosition(int cellPx) {
+view::GameSnapshot startingPosition(int cellPx, view::PixelPoint boardOrigin) {
     view::GameSnapshot snap;
     snap.boardWidth = 8;
     snap.boardHeight = 8;
+    snap.boardOrigin = boardOrigin;
+
+    // Sample panel contents. This harness exists to eyeball the view layer, so
+    // it supplies its own display strings rather than running a game -- the same
+    // trivial stand-in role it already plays for the seam.
+    snap.whitePanel.name = "White";
+    snap.whitePanel.score = 4;
+    snap.whitePanel.moves = {{"00:02.314", "e4"},
+                             {"00:06.927", "Nf3"},
+                             {"00:13.401", "Bb5"},
+                             {"00:23.589", "Re1"},
+                             {"00:40.102", "Bxc6"},
+                             {"01:08.577", "dxe5"}};
+    snap.blackPanel.name = "Black";
+    snap.blackPanel.score = 7;
+    snap.blackPanel.moves = {{"00:04.105", "e5"},
+                             {"00:09.642", "Nc6"},
+                             {"00:15.998", "a6"},
+                             {"00:20.781", "Nf6"},
+                             {"01:04.756", "exd4"},
+                             {"01:18.662", "JNe4"}};
 
     auto addPiece = [&](model::Kind kind, model::Color color, int row, int col) {
-        snap.pieces.push_back(
-            view::PieceView{kind, color, model::State::Idle,
-                            view::PixelPoint{col * cellPx, row * cellPx}});
+        snap.pieces.push_back(view::PieceView{
+            kind, color, model::State::Idle,
+            view::PixelPoint{boardOrigin.x + col * cellPx,
+                             boardOrigin.y + row * cellPx}});
     };
 
     for (int col = 0; col < 8; ++col) {
@@ -50,8 +73,11 @@ int main(int argc, char** argv) {
     const std::string assetsRoot = (argc > 1) ? argv[1] : "assets";
     const bool showWindow = (argc > 2 && std::string(argv[2]) == "--show");
 
-    view::RenderConfig config{assetsRoot, view::defaultCellPx};
-    view::GameSnapshot snapshot = startingPosition(config.cellPx);
+    const view::RenderConfig config =
+        view::defaultRenderConfig(assetsRoot, view::defaultCellPx);
+    const view::FrameLayout layout = view::computeLayout(config, 8, 8);
+    view::GameSnapshot snapshot =
+        startingPosition(config.cellPx, layout.boardOrigin);
 
     if (showWindow) {
         // On-screen path: a persistent, non-blocking window that reports clicks.
@@ -59,18 +85,25 @@ int main(int argc, char** argv) {
         // turns a click pixel into a board cell. This proves the chain
         // window -> pixel -> cell that will later feed engine move commands.
         view::ImageView view{config};
-        input::BoardMapper mapper{snapshot.boardWidth, snapshot.boardHeight};
+        input::BoardMapper mapper{snapshot.boardWidth, snapshot.boardHeight,
+                                  config.cellPx, layout.boardOrigin.x,
+                                  layout.boardOrigin.y};
 
         view.open();
         while (view.isOpen()) {
             // Static demo: a zero delta holds every piece on its first frame.
             view.render(snapshot, 0);
-            if (auto px = view.pollClick()) {
-                if (auto cell = mapper.toCell(px->x, px->y)) {
-                    std::cout << "cell: row=" << cell->row
+            for (const view::MouseAction& action : view.takeMouseActions()) {
+                const char* const kind =
+                    action.type == view::MouseAction::Type::DoubleClick
+                        ? "double-click"
+                        : "click";
+                if (auto cell = mapper.toCell(action.position.x,
+                                              action.position.y)) {
+                    std::cout << kind << ": row=" << cell->row
                               << " col=" << cell->col << "\n";
                 } else {
-                    std::cout << "click outside board\n";
+                    std::cout << kind << " outside board\n";
                 }
             }
         }

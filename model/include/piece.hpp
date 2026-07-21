@@ -45,6 +45,15 @@ private:
 bool operator==(const Piece& a, const Piece& b);
 bool operator!=(const Piece& a, const Piece& b);
 
+// The other side. The one definition of "the opposing colour", so no caller
+// re-derives it with its own conditional.
+Color opponentOf(Color color);
+
+// What capturing a piece of this kind is worth. A property of the KIND, not of
+// the instance: deriving it on demand is what keeps a promoted pawn's worth
+// correct without anyone having to remember to update a stored field.
+int costOf(Kind kind);
+
 std::ostream& operator<<(std::ostream& os, Color c);
 std::ostream& operator<<(std::ostream& os, Kind k);
 std::ostream& operator<<(std::ostream& os, State s);

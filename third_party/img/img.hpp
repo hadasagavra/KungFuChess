@@ -25,6 +25,18 @@ public:
               const std::pair<int, int>& size = {},
               bool keep_aspect = false,
               int interpolation = cv::INTER_AREA);
+
+    /**
+     * Create a blank image of the given size, filled with a solid colour. Used
+     * as a canvas when the frame is larger than any single loaded image -- e.g.
+     * a board with side panels drawn around it.
+     *
+     * @param width Canvas width in pixels
+     * @param height Canvas height in pixels
+     * @param color Fill colour (BGR or BGRA)
+     * @return Reference to this object for method chaining
+     */
+    Img& create(int width, int height, const cv::Scalar& color);
     
     /**
      * Draw this image onto another image at position (x, y)

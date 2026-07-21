@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "model/include/piece.hpp"
@@ -42,16 +43,36 @@ struct PieceView {
     double restProgress = 0.0;
 };
 
+// One row of a player's move table, already written out as text. The seam does
+// the formatting so the Renderer only ever places strings -- it never learns
+// what a move is, how a clock is written, or what the notation means.
+struct MoveRow {
+    std::string time;
+    std::string move;
+};
+
+// Everything shown in one player's side panel.
+struct PlayerPanel {
+    std::string name;
+    int score = 0;
+    std::vector<MoveRow> moves;
+};
+
 // The read-only contract the Renderer draws. Board dimensions are in CELLS;
 // piece positions are already in PIXELS (the seam converts cells to pixels).
 struct GameSnapshot {
     int boardWidth;
     int boardHeight;
+    // Top-left pixel of the board within the frame. Non-zero once side panels
+    // take up room to the left of it.
+    PixelPoint boardOrigin{0, 0};
     std::vector<PieceView> pieces;
     // Cells to shade as legal-move hints, each the top-left pixel of a cell. The
     // seam fills these from the engine's legal-destination query; the Renderer
     // paints them. Empty when nothing is selected.
     std::vector<PixelPoint> highlights;
+    PlayerPanel whitePanel;
+    PlayerPanel blackPanel;
 };
 
 }  // namespace kfc::view

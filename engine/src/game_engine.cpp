@@ -38,6 +38,23 @@ std::optional<Piece> GameSnapshot::pieceAt(Position cell) const {
 
 GameEngine::GameEngine(Board& board) : board_(board), arbiter_(board_) {}
 
+void GameEngine::addObserver(GameObserver& observer) {
+    subject_.addObserver(observer);
+}
+
+bool GameEngine::isCaptureTarget(Position destination,
+                                 model::Color mover) const {
+    const std::shared_ptr<Piece> occupant = board_.getPieceAt(destination);
+    return occupant && occupant->getColor() != mover;
+}
+
+void GameEngine::publishAccepted(const Piece& piece, Position from, Position to,
+                                 bool isJump) {
+    subject_.publishMove(model::MoveEvent{
+        gameState_.elapsedMs(), piece.getColor(), piece.getKind(), from, to,
+        !isJump && isCaptureTarget(to, piece.getColor()), isJump});
+}
+
 std::optional<rules::MoveReason> GameEngine::realTimeBlockFor(
     const std::shared_ptr<Piece>& piece) const {
     // A piece already under way may not be sent somewhere new -- it has to finish
@@ -68,6 +85,7 @@ MoveResult GameEngine::requestMove(Position source, Position destination) {
         return {false, *blocked};
     }
 
+    publishAccepted(*piece, source, destination, false);
     arbiter_.startMotion(source, destination);
     return {true, rules::MoveReason::Ok};
 }
@@ -85,16 +103,25 @@ MoveResult GameEngine::requestJump(Position cell) {
         return {false, *blocked};
     }
 
+    publishAccepted(*piece, cell, cell, true);
     arbiter_.startJump(cell);
     return {true, rules::MoveReason::Ok};
 }
 
 void GameEngine::wait(int ms) {
+    gameState_.advance(ms);
+
     const std::vector<realtime::ArrivalReport> reports = arbiter_.advance(ms);
     for (const realtime::ArrivalReport& report : reports) {
-        if (report.kingCaptured) {
-            gameState_.markOver();
-            return;
+        // Every capture is announced, and taking the king is what decides the
+        // game. The loop runs to completion either way: several things can
+        // resolve in one tick, and stopping early would lose the captures that
+        // happened alongside the decisive one.
+        if (report.captured) {
+            subject_.publishCapture(*report.captured);
+            if (report.captured->kind == model::Kind::King) {
+                gameState_.markOver();
+            }
         }
         if (!report.landed) {
             continue;

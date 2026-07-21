@@ -20,13 +20,6 @@ constexpr std::array<KindLetter, 6> kindLetters{{
     {model::Kind::Pawn, 'P'},
 }};
 
-char letterOf(model::Kind kind) {
-    for (const KindLetter& entry : kindLetters) {
-        if (entry.kind == kind) return entry.letter;
-    }
-    return '?';
-}
-
 std::optional<model::Kind> kindOf(char letter) {
     for (const KindLetter& entry : kindLetters) {
         if (entry.letter == letter) return entry.kind;
@@ -46,6 +39,13 @@ char charOf(model::Color color) {
 
 }  // namespace
 
+char kindLetter(model::Kind kind) {
+    for (const KindLetter& entry : kindLetters) {
+        if (entry.kind == kind) return entry.letter;
+    }
+    return '?';
+}
+
 bool isEmptyToken(const std::string& token) {
     return token.size() == 1 && token[0] == emptyToken;
 }
@@ -62,7 +62,7 @@ std::string encodeCell(const std::optional<model::Piece>& cell) {
     if (!cell) return std::string(1, emptyToken);
     std::string token;
     token += charOf(cell->getColor());
-    token += letterOf(cell->getKind());
+    token += kindLetter(cell->getKind());
     return token;
 }
 

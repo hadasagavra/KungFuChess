@@ -6,7 +6,10 @@
 #include <string>
 #include <vector>
 
+#include "engine/include/game_observer.hpp"
+#include "engine/include/game_subject.hpp"
 #include "model/include/board.hpp"
+#include "model/include/game_event.hpp"
 #include "model/include/game_state.hpp"
 #include "model/include/piece.hpp"
 #include "model/include/position.hpp"
@@ -59,6 +62,12 @@ class GameEngine {
 public:
     explicit GameEngine(model::Board& board);
 
+    // Register a listener for the game's events (moves ordered, pieces
+    // captured). The engine never learns what an observer does with them, so
+    // features like the moves log, the score, or a future network publisher are
+    // added without touching this class. The observer must outlive the engine.
+    void addObserver(GameObserver& observer);
+
     MoveResult requestMove(model::Position source, model::Position destination);
     MoveResult requestJump(model::Position cell);
     void wait(int ms);
@@ -78,10 +87,20 @@ private:
     std::optional<rules::MoveReason> realTimeBlockFor(
         const std::shared_ptr<model::Piece>& piece) const;
 
+    // Whether an enemy piece is standing on `destination` right now, so the
+    // published event can say the move was ordered as a capture. Read at command
+    // time: in a simultaneous game that occupant may still slip away.
+    bool isCaptureTarget(model::Position destination, model::Color mover) const;
+
+    // Build and publish the event for a command the engine has just accepted.
+    void publishAccepted(const model::Piece& piece, model::Position from,
+                         model::Position to, bool isJump);
+
     model::Board& board_;
     model::GameState gameState_;
     rules::RuleEngine ruleEngine_;
     realtime::RealTimeArbiter arbiter_;
+    GameSubject subject_;
 };
 
 }  // namespace kfc::engine

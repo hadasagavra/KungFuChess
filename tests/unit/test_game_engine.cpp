@@ -4,9 +4,12 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <vector>
 
 #include "engine/include/game_engine.hpp"
+#include "engine/include/game_observer.hpp"
 #include "model/include/board.hpp"
+#include "model/include/game_event.hpp"
 #include "model/include/piece.hpp"
 #include "model/include/position.hpp"
 
@@ -280,4 +283,195 @@ TEST_CASE("getSnapshot reflects the current logical state") {
     CHECK(rook->getKind() == Kind::Rook);
 
     CHECK_FALSE(snap.pieceAt(Position{1, 1}).has_value());
+}
+
+// ---------------------------------------------------------------------------
+// Observer seam: what the engine announces as the game unfolds. These verify the
+// engine is a proper Subject -- that it publishes the right facts at the right
+// moment -- without any listener that a product feature would actually use.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+class RecordingObserver : public kfc::engine::GameObserver {
+public:
+    void onMove(const kfc::model::MoveEvent& event) override {
+        moves.push_back(event);
+    }
+    void onCapture(const kfc::model::CapturedPiece& captured) override {
+        captures.push_back(captured);
+    }
+
+    std::vector<kfc::model::MoveEvent> moves;
+    std::vector<kfc::model::CapturedPiece> captures;
+};
+
+}  // namespace
+
+TEST_CASE("An accepted move is announced with the piece that made it") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
+
+    REQUIRE(observer.moves.size() == 1);
+    const kfc::model::MoveEvent& move = observer.moves[0];
+    CHECK(move.player == Color::White);
+    CHECK(move.kind == Kind::Rook);
+    CHECK(move.from == Position{4, 4});
+    CHECK(move.to == Position{4, 6});
+    CHECK_FALSE(move.isJump);
+}
+
+TEST_CASE("A move is announced when it is ordered, not when it lands") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
+    CHECK(observer.moves.size() == 1);  // already logged, still travelling
+
+    engine.wait(2 * oneCellMs);
+    CHECK(observer.moves.size() == 1);  // arriving does not log it again
+}
+
+TEST_CASE("A rejected move is not announced") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    // A rook cannot move diagonally, so nothing was ordered and nothing is said.
+    REQUIRE_FALSE(engine.requestMove(Position{4, 4}, Position{5, 5}).isAccepted);
+
+    CHECK(observer.moves.empty());
+}
+
+TEST_CASE("A move ordered onto an enemy is announced as a capture") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    place(board, 2, Color::Black, Kind::Pawn, Position{4, 6});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
+
+    REQUIRE(observer.moves.size() == 1);
+    CHECK(observer.moves[0].isCapture);
+}
+
+TEST_CASE("A move onto an empty square is not announced as a capture") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
+
+    REQUIRE(observer.moves.size() == 1);
+    CHECK_FALSE(observer.moves[0].isCapture);
+}
+
+TEST_CASE("A jump is announced as a jump on its own square") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Knight, Position{4, 4});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    REQUIRE(engine.requestJump(Position{4, 4}).isAccepted);
+
+    REQUIRE(observer.moves.size() == 1);
+    CHECK(observer.moves[0].isJump);
+    CHECK(observer.moves[0].from == Position{4, 4});
+    CHECK(observer.moves[0].to == Position{4, 4});
+}
+
+TEST_CASE("Announced moves carry elapsed game time") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    engine.wait(2500);
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
+
+    REQUIRE(observer.moves.size() == 1);
+    CHECK(observer.moves[0].timeMs == 2500);
+}
+
+TEST_CASE("A capture is announced when the piece is actually taken") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    place(board, 2, Color::Black, Kind::Queen, Position{4, 5});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
+    CHECK(observer.captures.empty());  // ordered, but not there yet
+
+    engine.wait(oneCellMs);
+
+    REQUIRE(observer.captures.size() == 1);
+    CHECK(observer.captures[0].kind == Kind::Queen);
+    CHECK(observer.captures[0].color == Color::Black);
+}
+
+TEST_CASE("Taking the king is announced and ends the game") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    place(board, 2, Color::Black, Kind::King, Position{4, 5});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 5}).isAccepted);
+    engine.wait(oneCellMs);
+
+    REQUIRE(observer.captures.size() == 1);
+    CHECK(observer.captures[0].kind == Kind::King);
+    CHECK(engine.isGameOver());
+}
+
+TEST_CASE("Two captures resolving together are both announced") {
+    Board board{8, 8};
+    // Two independent white rooks, each one cell from an enemy.
+    place(board, 1, Color::White, Kind::Rook, Position{0, 0});
+    place(board, 2, Color::Black, Kind::Pawn, Position{0, 1});
+    place(board, 3, Color::White, Kind::Rook, Position{4, 0});
+    place(board, 4, Color::Black, Kind::Knight, Position{4, 1});
+    GameEngine engine{board};
+    RecordingObserver observer;
+    engine.addObserver(observer);
+
+    REQUIRE(engine.requestMove(Position{0, 0}, Position{0, 1}).isAccepted);
+    REQUIRE(engine.requestMove(Position{4, 0}, Position{4, 1}).isAccepted);
+    engine.wait(oneCellMs);  // both land in the same tick
+
+    CHECK(observer.captures.size() == 2);
+}
+
+TEST_CASE("Every registered observer hears the same events") {
+    Board board{8, 8};
+    place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+    GameEngine engine{board};
+    RecordingObserver first;
+    RecordingObserver second;
+    engine.addObserver(first);
+    engine.addObserver(second);
+
+    REQUIRE(engine.requestMove(Position{4, 4}, Position{4, 6}).isAccepted);
+
+    CHECK(first.moves.size() == 1);
+    CHECK(second.moves.size() == 1);
 }

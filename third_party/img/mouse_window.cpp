@@ -1,67 +1,62 @@
 #include "mouse_window.hpp"
 
 #include <stdexcept>
+#include <utility>
 
-#include <opencv2/opencv.hpp>
+#include <opencv2/highgui.hpp>
 
-void MouseWindow::openWindow(const std::string& title) {
-    windowTitle_ = title;
+#include "img.hpp"
+
+MouseWindow::MouseWindow(std::string title) : title_(std::move(title)) {
     // Resizable window that preserves the image aspect ratio when the user
     // stretches it -- letterboxing (not distortion) fills the extra space.
-    cv::namedWindow(windowTitle_, cv::WINDOW_NORMAL | cv::WINDOW_KEEPRATIO);
-    cv::setMouseCallback(windowTitle_, &MouseWindow::onMouse, this);
+    cv::namedWindow(title_, cv::WINDOW_NORMAL | cv::WINDOW_KEEPRATIO);
+    cv::setMouseCallback(title_, &MouseWindow::onMouse, this);
 }
 
-void MouseWindow::showFrame(const Img& frame) {
-    if (windowTitle_.empty()) {
-        throw std::runtime_error("openWindow() must be called before showFrame().");
+MouseWindow::~MouseWindow() {
+    // Destructors must not let exceptions escape (that would call
+    // std::terminate), and closing a window the user already closed is a
+    // perfectly normal way to get here -- so failures to close are swallowed.
+    try {
+        cv::destroyWindow(title_);
+    } catch (const cv::Exception&) {
     }
+}
+
+
+void MouseWindow::showFrame(const Img& frame) {
     if (!frame.is_loaded()) {
         throw std::runtime_error("Frame not loaded.");
     }
 
-    cv::imshow(windowTitle_, frame.get_mat());
+    cv::imshow(title_, frame.get_mat());
     // Non-blocking: pump the GUI event queue (mouse callback, resize) for ~1ms
     // and return, so the caller keeps control of the render loop.
     cv::waitKey(1);
 }
 
 bool MouseWindow::isWindowOpen() const {
-    if (windowTitle_.empty()) {
-        return false;
-    }
     // Drops below 1 once the user closes the window via its X button.
-    return cv::getWindowProperty(windowTitle_, cv::WND_PROP_VISIBLE) >= 1;
+    return cv::getWindowProperty(title_, cv::WND_PROP_VISIBLE) >= 1;
 }
 
-std::optional<ClickPos> MouseWindow::pollClick() {
-    std::optional<ClickPos> click = pendingClick_;
-    pendingClick_.reset();
-    return click;
+std::vector<MouseEvent> MouseWindow::takeMouseEvents() {
+    std::vector<MouseEvent> taken;
+    taken.swap(events_);
+    return taken;
 }
 
-std::optional<ClickPos> MouseWindow::pollDoubleClick() {
-    std::optional<ClickPos> click = pendingDoubleClick_;
-    pendingDoubleClick_.reset();
-    return click;
-}
-
-void MouseWindow::closeWindow() {
-    if (!windowTitle_.empty()) {
-        cv::destroyWindow(windowTitle_);
-        windowTitle_.clear();
-    }
-}
-
-void MouseWindow::onMouse(int event, int x, int y, int /*flags*/, void* userdata) {
-    // OpenCV already reports the click in image pixel coordinates: it maps the
-    // window click through the current resize/aspect-ratio itself. So we store
+void MouseWindow::onMouse(int event, int x, int y, int /*flags*/,
+                          void* userdata) {
+    // OpenCV already reports the position in image pixel coordinates: it maps the
+    // window position through the current resize/aspect-ratio itself. So we store
     // (x, y) as-is -- doing our own scaling here would double-transform it.
     MouseWindow* self = static_cast<MouseWindow*>(userdata);
     if (event == cv::EVENT_LBUTTONDOWN) {
-        self->pendingClick_ = ClickPos{x, y};
+        self->events_.push_back({MouseEvent::Type::Click, x, y});
     } else if (event == cv::EVENT_LBUTTONDBLCLK) {
         // On Windows this is OpenCV's translation of WM_LBUTTONDBLCLK.
-        self->pendingDoubleClick_ = ClickPos{x, y};
+        self->events_.push_back({MouseEvent::Type::DoubleClick, x, y});
     }
 }

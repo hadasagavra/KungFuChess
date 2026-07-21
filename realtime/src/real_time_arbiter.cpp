@@ -13,7 +13,6 @@
 
 namespace kfc::realtime {
 
-using model::Kind;
 using model::Piece;
 using model::Position;
 using model::State;
@@ -147,7 +146,7 @@ void RealTimeArbiter::resolveEntry(std::size_t index, ResolvedFlags& resolved,
         // Two pieces of one colour never share a cell: the one that would have
         // walked in second stops on the cell it already holds.
         motion.stopHere();
-        finishMotion(index, false, resolved, reports);
+        finishMotion(index, std::nullopt, resolved, reports);
         return;
     }
     if (outcome == EntryOutcome::CapturedByAirborne) {
@@ -155,23 +154,27 @@ void RealTimeArbiter::resolveEntry(std::size_t index, ResolvedFlags& resolved,
         return;
     }
 
-    const bool kingCaptured = outcome == EntryOutcome::Capture &&
-                              captureAt(motion.nextCell(), resolved);
+    std::optional<model::CapturedPiece> captured;
+    if (outcome == EntryOutcome::Capture) {
+        captured = captureAt(motion.nextCell(), resolved);
+    }
     board_.movePiece(motion.currentCell(), motion.nextCell());
     motion.completeStep();
 
     if (motion.isComplete()) {
-        finishMotion(index, kingCaptured, resolved, reports);
-    } else if (kingCaptured) {
-        // The game is already decided; the engine must not have to wait for the
-        // rest of this journey to hear about it.
-        reports.push_back(ArrivalReport{motion.currentCell(), true, true});
+        finishMotion(index, captured, resolved, reports);
+    } else if (captured) {
+        // The capture must be reported the moment it happens: the engine scores
+        // it (and may end the game on a king) without waiting for the rest of
+        // this journey to finish.
+        reports.push_back(ArrivalReport{motion.currentCell(), true, captured});
     }
 }
 
-bool RealTimeArbiter::captureAt(Position cell, ResolvedFlags& resolved) {
+model::CapturedPiece RealTimeArbiter::captureAt(Position cell,
+                                                ResolvedFlags& resolved) {
     const std::shared_ptr<Piece> victim = board_.getPieceAt(cell);
-    const bool wasKing = victim->getKind() == Kind::King;
+    const model::CapturedPiece taken{victim->getKind(), victim->getColor()};
     victim->setState(State::Captured);
     board_.removePiece(cell);
 
@@ -181,7 +184,7 @@ bool RealTimeArbiter::captureAt(Position cell, ResolvedFlags& resolved) {
             resolved[index] = true;
         }
     }
-    return wasKing;
+    return taken;
 }
 
 void RealTimeArbiter::yieldToAirborne(std::size_t index, ResolvedFlags& resolved,
@@ -200,16 +203,17 @@ void RealTimeArbiter::yieldToAirborne(std::size_t index, ResolvedFlags& resolved
     motion.completeStep();
 
     startCooldown(board_.getPieceAt(cell)->getId(), cell);
-    reports.push_back(ArrivalReport{cell, false, true});
+    reports.push_back(ArrivalReport{cell, true, std::nullopt});
     resolved[index] = true;
 }
 
-void RealTimeArbiter::finishMotion(std::size_t index, bool kingCaptured,
+void RealTimeArbiter::finishMotion(std::size_t index,
+                                   std::optional<model::CapturedPiece> captured,
                                    ResolvedFlags& resolved,
                                    std::vector<ArrivalReport>& reports) {
     const Position cell = active_[index].destination();
     startCooldown(board_.getPieceAt(cell)->getId(), cell);
-    reports.push_back(ArrivalReport{cell, kingCaptured, true});
+    reports.push_back(ArrivalReport{cell, true, captured});
     resolved[index] = true;
 }
 
@@ -242,8 +246,10 @@ void RealTimeArbiter::landAirborne(int deltaMs,
             // An enemy arrived during the jump: remove it, and the airborne piece
             // lands back in its cell (capturing the arriver).
             const std::shared_ptr<Piece> victim = board_.getPieceAt(cell);
-            const bool kingCaptured = victim && victim->getKind() == Kind::King;
+            std::optional<model::CapturedPiece> captured;
             if (victim) {
+                captured = model::CapturedPiece{victim->getKind(),
+                                                victim->getColor()};
                 victim->setState(State::Captured);
                 board_.removePiece(cell);
             }
@@ -251,7 +257,7 @@ void RealTimeArbiter::landAirborne(int deltaMs,
             lander->setCell(cell);
             board_.addPiece(lander);
             startCooldown(lander->getId(), cell);
-            reports.push_back(ArrivalReport{cell, kingCaptured, false});
+            reports.push_back(ArrivalReport{cell, false, captured});
         } else {
             // No enemy arrived: the piece just lands and cools down.
             startCooldown(board_.getPieceAt(cell)->getId(), cell);

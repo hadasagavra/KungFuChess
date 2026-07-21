@@ -1,8 +1,47 @@
 #include "model/include/piece.hpp"
 
+#include <array>
 #include <ostream>
 
 namespace kfc::model {
+namespace {
+
+struct KindCost {
+    Kind kind;
+    int cost;
+};
+
+// The one place that defines what each piece kind is worth. A king is scored at
+// zero because taking it ends the game outright -- the win is the reward, not a
+// number added to a total.
+constexpr int pawnCost = 1;
+constexpr int knightCost = 3;
+constexpr int bishopCost = 3;
+constexpr int rookCost = 5;
+constexpr int queenCost = 9;
+constexpr int kingCost = 0;
+
+constexpr std::array<KindCost, 6> kindCosts{{
+    {Kind::King, kingCost},
+    {Kind::Queen, queenCost},
+    {Kind::Rook, rookCost},
+    {Kind::Bishop, bishopCost},
+    {Kind::Knight, knightCost},
+    {Kind::Pawn, pawnCost},
+}};
+
+}  // namespace
+
+Color opponentOf(Color color) {
+    return color == Color::White ? Color::Black : Color::White;
+}
+
+int costOf(Kind kind) {
+    for (const KindCost& entry : kindCosts) {
+        if (entry.kind == kind) return entry.cost;
+    }
+    return 0;
+}
 
 bool operator==(const Piece& a, const Piece& b) {
     return a.getId() == b.getId();

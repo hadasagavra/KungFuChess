@@ -35,6 +35,16 @@ Img& Img::read(const std::string& path,
     return *this;
 }
 
+Img& Img::create(int width, int height, const cv::Scalar& color) {
+    if (width <= 0 || height <= 0) {
+        throw std::runtime_error("Canvas size must be positive.");
+    }
+    // 4-channel so that alpha-blended draws (highlights, cooldown shades) and
+    // BGRA sprites composite onto it the same way they do onto a loaded board.
+    img = cv::Mat(height, width, CV_8UC4, color);
+    return *this;
+}
+
 void Img::draw_on(Img& other_img, int x, int y) {
     if (img.empty() || other_img.img.empty()) {
         throw std::runtime_error("Both images must be loaded before drawing.");

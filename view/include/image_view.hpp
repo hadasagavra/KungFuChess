@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <vector>
 
 #include "mouse_window.hpp"
 #include "view/include/animation_config_store.hpp"
@@ -10,6 +11,16 @@
 #include "view/include/renderer.hpp"
 
 namespace kfc::view {
+
+// A mouse action the view observed, in frame pixel coordinates. The view-level
+// twin of the window's MouseEvent: it reports what happened and where in pixels,
+// never a cell -- mapping a pixel to a board cell belongs to the input layer.
+struct MouseAction {
+    enum class Type { Click, DoubleClick };
+
+    Type type;
+    PixelPoint position;
+};
 
 // The graphical view: composes a frame from a read-only GameSnapshot (via
 // Renderer) and puts it on screen using only the Img wrapper. Display only --
@@ -36,20 +47,19 @@ public:
     // advances the sprite animations. Call once per loop iteration after open().
     void render(const GameSnapshot& snapshot, int deltaMs);
 
-    // The last unread click, in frame pixel coordinates, or std::nullopt if
-    // none. Display only: returns a pixel, never a cell -- mapping a pixel to a
-    // board cell belongs to the input layer, above the view.
-    std::optional<PixelPoint> pollClick();
-
-    // The last unread double-click, in frame pixel coordinates, or std::nullopt
-    // if none. Same display-only contract as pollClick(): pixels, not cells.
-    std::optional<PixelPoint> pollDoubleClick();
+    // The mouse actions observed since the last call, in the order the user
+    // produced them, leaving none behind. Empty before open(). Display only:
+    // reports pixels, never cells.
+    std::vector<MouseAction> takeMouseActions();
 
 private:
     Renderer renderer_;
     AnimationConfigStore configStore_;  // disk-backed animation configs
     Animator animator_;                 // display-side animation state machine
-    MouseWindow window_;  // owns the persistent window + raw click capture
+    // The window owns its OpenCV window for its whole lifetime, so it is created
+    // by open() rather than with the view -- the one-shot show() path needs no
+    // persistent window. Held in place: the mouse callback captures its address.
+    std::optional<MouseWindow> window_;
 };
 
 }  // namespace kfc::view

@@ -50,7 +50,7 @@ TEST_CASE("A motion moves the piece only on arrival, then cools it down") {
     const std::vector<ArrivalReport> reports = arbiter.advance(1);
     REQUIRE(reports.size() == 1);
     CHECK(reports[0].destination == Position{4, 5});
-    CHECK_FALSE(reports[0].kingCaptured);
+    CHECK_FALSE(reports[0].captured.has_value());
     CHECK(board.getPieceAt(Position{4, 5}).get() == rook.get());
     CHECK(board.getPieceAt(Position{4, 4}).get() == nullptr);
     CHECK(rook->getState() == State::Resting);  // cooldown, not idle
@@ -333,8 +333,8 @@ TEST_CASE("Cooldown blocks the piece until it elapses, then it is idle again") {
     CHECK(rook->getState() == State::Idle);
 }
 
-TEST_CASE("Arrival captures an enemy and flags a king capture") {
-    SUBCASE("capturing a pawn does not flag a king") {
+TEST_CASE("Arrival captures an enemy and names the victim") {
+    SUBCASE("capturing a pawn reports that pawn") {
         Board board{8, 8};
         place(board, 1, Color::White, Kind::Rook, Position{4, 4});
         auto enemy = place(board, 2, Color::Black, Kind::Pawn, Position{4, 6});
@@ -342,10 +342,12 @@ TEST_CASE("Arrival captures an enemy and flags a king capture") {
         arbiter.startMotion(Position{4, 4}, Position{4, 6});
         const std::vector<ArrivalReport> reports = arbiter.advance(2000);
         REQUIRE(reports.size() == 1);
-        CHECK_FALSE(reports[0].kingCaptured);
+        REQUIRE(reports[0].captured.has_value());
+        CHECK(reports[0].captured->kind == Kind::Pawn);
+        CHECK(reports[0].captured->color == Color::Black);
         CHECK(enemy->getState() == State::Captured);
     }
-    SUBCASE("capturing a king flags it") {
+    SUBCASE("capturing a king reports the king") {
         Board board{8, 8};
         place(board, 1, Color::White, Kind::Rook, Position{4, 4});
         place(board, 2, Color::Black, Kind::King, Position{4, 6});
@@ -353,7 +355,17 @@ TEST_CASE("Arrival captures an enemy and flags a king capture") {
         arbiter.startMotion(Position{4, 4}, Position{4, 6});
         const std::vector<ArrivalReport> reports = arbiter.advance(2000);
         REQUIRE(reports.size() == 1);
-        CHECK(reports[0].kingCaptured);
+        REQUIRE(reports[0].captured.has_value());
+        CHECK(reports[0].captured->kind == Kind::King);
+    }
+    SUBCASE("an uncontested arrival reports no victim") {
+        Board board{8, 8};
+        place(board, 1, Color::White, Kind::Rook, Position{4, 4});
+        RealTimeArbiter arbiter{board};
+        arbiter.startMotion(Position{4, 4}, Position{4, 6});
+        const std::vector<ArrivalReport> reports = arbiter.advance(2000);
+        REQUIRE(reports.size() == 1);
+        CHECK_FALSE(reports[0].captured.has_value());
     }
 }
 

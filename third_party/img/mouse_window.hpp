@@ -1,40 +1,51 @@
 #pragma once
 
-#include <optional>
 #include <string>
+#include <vector>
 
-#include "img.hpp"
+// Img is only referred to by reference here, so a forward declaration is enough.
+// This deliberately avoids including img.hpp (and through it all of OpenCV) from
+// this header -- callers that just need the window API pay nothing for OpenCV.
+class Img;
 
-// A mouse click reported by MouseWindow, already converted to IMAGE pixel
-// coordinates (top-left origin). MouseWindow speaks pixels only -- it knows
-// nothing about cells, board positions, or game rules; mapping a pixel to a cell
-// happens above it, in the input layer.
-struct ClickPos {
+// Something the user did with the mouse, in IMAGE pixel coordinates (top-left
+// origin). MouseWindow speaks pixels only -- it knows nothing about cells, board
+// positions, or game rules; deciding what an event means happens above it, in
+// the input layer.
+struct MouseEvent {
+    enum class Type { Click, DoubleClick };
+
+    Type type;
     int x;
     int y;
 };
 
 // An interactive, persistent on-screen window that displays frames and captures
-// mouse clicks. This is the windowing/input half of the OpenCV boundary: like
+// mouse events. This is the windowing/input half of the OpenCV boundary: like
 // Img (a pure bitmap wrapper), MouseWindow is one of the ONLY places allowed to
-// touch raw OpenCV -- here, the window + mouse-callback side of it. It reports
-// clicks as raw pixels and holds no game rules and no board knowledge.
+// touch raw OpenCV -- here, the window + mouse-callback side of it. It holds no
+// game rules and no board knowledge.
+//
+// The window is owned: it opens on construction and closes on destruction. The
+// mouse callback is registered with this object's address, so the object must
+// stay put -- copying is disabled to keep that guarantee.
 class MouseWindow {
 public:
     /**
-     * Open a persistent, resizable window and start listening for mouse clicks.
-     * The window keeps the image aspect ratio when resized. Left-clicks and left
-     * double-clicks are captured (in image pixels) via pollClick() /
-     * pollDoubleClick().
+     * Open a persistent, resizable window and start listening for mouse events.
+     * The window keeps the image aspect ratio when resized.
      *
      * @param title Window title / OpenCV window name
      */
-    void openWindow(const std::string& title = "KungFuChess");
+    explicit MouseWindow(std::string title = "KungFuChess");
+    ~MouseWindow();
+
+    MouseWindow(const MouseWindow&) = delete;
+    MouseWindow& operator=(const MouseWindow&) = delete;
 
     /**
      * Draw one frame into the window without blocking. Pumps the GUI event queue
-     * (so clicks and resizes are processed) and returns immediately. Must be
-     * called after openWindow().
+     * (so mouse events and resizes are processed) and returns immediately.
      *
      * @param frame The image to display this tick
      */
@@ -47,33 +58,21 @@ public:
     bool isWindowOpen() const;
 
     /**
-     * Retrieve the last unread left-click, in image pixel coordinates, and clear
-     * it. Returns std::nullopt if no new click occurred since the last call.
+     * Hand over the mouse events collected since the last call, leaving none
+     * behind. Events keep the order the user produced them in, so a caller can
+     * tell a lone click from the click that opens a double-click. Queuing rather
+     * than dispatching keeps the window ignorant of what reacts to the events.
      */
-    std::optional<ClickPos> pollClick();
-
-    /**
-     * Retrieve the last unread left double-click, in image pixel coordinates, and
-     * clear it. Returns std::nullopt if no new double-click occurred since the
-     * last call. On Windows this is OpenCV's translation of the native
-     * WM_LBUTTONDBLCLK message.
-     */
-    std::optional<ClickPos> pollDoubleClick();
-
-    /**
-     * Close the window opened by openWindow().
-     */
-    void closeWindow();
+    std::vector<MouseEvent> takeMouseEvents();
 
 private:
     // Mouse callback registered with OpenCV. userdata points at the owning
-    // MouseWindow. Routes left-button presses to pendingClick_ and left
-    // double-clicks to pendingDoubleClick_ (both in the image pixel coordinates
-    // OpenCV reports).
+    // MouseWindow. Appends left clicks and left double-clicks to events_, in the
+    // image pixel coordinates OpenCV reports. OpenCV runs this while the window
+    // pumps its queue, which happens inside showFrame on this same thread, so
+    // events_ needs no locking.
     static void onMouse(int event, int x, int y, int flags, void* userdata);
 
-    // windowTitle_ is empty when no window is open.
-    std::string windowTitle_;
-    std::optional<ClickPos> pendingClick_;        // last unread left-click (image px)
-    std::optional<ClickPos> pendingDoubleClick_;  // last unread left double-click
+    std::string title_;
+    std::vector<MouseEvent> events_;
 };

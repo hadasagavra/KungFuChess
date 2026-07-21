@@ -64,8 +64,10 @@ Layer mapping: model + rules + realtime + engine are Business Logic; input + vie
 Naming conventions
 Files & directories: snake_case, one module per name, paired .hpp / .cpp (header-only modules may omit the .cpp). Test files are .cpp only, named test_<module>.
 Types (classes, structs, enums): PascalCase.
+Enum values: PascalCase (e.g. Kind::Knight, MoveReason::Ok).
 Functions & variables: camelCase; private members carry a trailing underscore (board_).
-Constants / enum values: kPascalCase (e.g. kSquareTravelMs).
+Constants: camelCase, with no prefix — e.g. squareTravelMs, msPerCell, defaultCellPx. Do NOT use a k prefix (kSquareTravelMs is wrong).
+Getters: get-prefixed camelCase (getKind(), getState()); conversions are toString(). Board dimensions are width() / height().
 Namespaces: kfc at the root, one nested namespace per layer (kfc::model, kfc::rules, kfc::realtime, kfc::engine, kfc::input, kfc::view, kfc::io). Business Logic namespaces must never #include from input/view.
 Module Internal Structure:
 Every architectural module (e.g., model/, rules/, realtime/) must be strictly divided into two sub-directories:

@@ -18,6 +18,11 @@ struct PieceCode {
     model::Kind kind;
 };
 
+// The letter that stands for a piece kind ('N' for a knight, and so on). Exposed
+// so that every textual rendering of a piece -- the board format and the move
+// notation alike -- reads the same mapping instead of spelling out its own.
+char kindLetter(model::Kind kind);
+
 // The single source of truth for the board's text encoding, in both directions,
 // so BoardPrinter and BoardParser never encode the piece letters independently.
 bool isEmptyToken(const std::string& token);

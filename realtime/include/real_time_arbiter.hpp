@@ -2,9 +2,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "model/include/board.hpp"
+#include "model/include/game_event.hpp"
 #include "model/include/piece.hpp"
 #include "model/include/position.hpp"
 #include "realtime/include/motion.hpp"
@@ -12,12 +14,16 @@
 namespace kfc::realtime {
 
 // What resolved this tick. landed = true for a normal motion arrival, false for
-// a jump landing. kingCaptured flags a king being taken so the engine can end
-// the game (the arbiter never knows about the engine).
+// a jump landing. captured names the piece taken, if any, so the engine can both
+// score it and notice that it was the king; the arbiter itself draws no
+// conclusion from it and never knows about the engine.
+//
+// The victim is reported instead of a separate "was it the king" flag, so that
+// one fact is not encoded twice and cannot drift.
 struct ArrivalReport {
     model::Position destination;
-    bool kingCaptured = false;
     bool landed = true;
+    std::optional<model::CapturedPiece> captured;
 };
 
 // What it means for a travelling piece to cross into the cell ahead of it. Every
@@ -73,12 +79,13 @@ private:
     EntryOutcome classifyEntry(const Motion& motion) const;
     void resolveEntry(std::size_t index, ResolvedFlags& resolved,
                       std::vector<ArrivalReport>& reports);
-    // Take the piece on `cell` off the board and stop it travelling. Returns
-    // whether it was a king.
-    bool captureAt(model::Position cell, ResolvedFlags& resolved);
+    // Take the piece on `cell` off the board and stop it travelling. Returns the
+    // victim's identity so the arrival report can carry it.
+    model::CapturedPiece captureAt(model::Position cell, ResolvedFlags& resolved);
     void yieldToAirborne(std::size_t index, ResolvedFlags& resolved,
                          std::vector<ArrivalReport>& reports);
-    void finishMotion(std::size_t index, bool kingCaptured,
+    void finishMotion(std::size_t index,
+                      std::optional<model::CapturedPiece> captured,
                       ResolvedFlags& resolved,
                       std::vector<ArrivalReport>& reports);
     void dropResolved(const ResolvedFlags& resolved);
