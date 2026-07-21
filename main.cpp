@@ -163,6 +163,7 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
             if (!opensDoubleClick) {
                 controller.handleClick(action.position.x, action.position.y);
             }
+
         }
     }
     return 0;

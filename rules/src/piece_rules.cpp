@@ -27,8 +27,8 @@ constexpr Step orthogonal[] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 constexpr Step diagonal[] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 constexpr Step allDirections[] = {{1, 0},  {-1, 0}, {0, 1},  {0, -1},
                                    {1, 1},  {1, -1}, {-1, 1}, {-1, -1}};
-constexpr Step knight[] = {{2, 1},  {2, -1},  {-2, 1},  {-2, -1},
-                            {1, 2},  {1, -2},  {-1, 2},  {-1, -2}};
+constexpr Step knightSteps[] = {{2, 1},  {2, -1},  {-2, 1},  {-2, -1},
+                                {1, 2},  {1, -2},  {-1, 2},  {-1, -2}};
 constexpr int diagonalColumns[] = {-1, 1};
 
 enum class Occupant { Empty, Friendly, Enemy, OffBoard };
@@ -130,7 +130,7 @@ std::set<Position> QueenRules::legalDestinations(const Board& board,
 
 std::set<Position> KnightRules::legalDestinations(const Board& board,
                                                   const Piece& piece) const {
-    return singleSteps(board, piece, knight);
+    return singleSteps(board, piece, knightSteps);
 }
 
 std::set<Position> KingRules::legalDestinations(const Board& board,
@@ -159,9 +159,9 @@ std::set<Position> PawnRules::legalDestinations(const Board& board,
 
     // Diagonal captures: allowed only onto an enemy-occupied cell.
     for (const int dCol : diagonalColumns) {
-        const Position diagonal{from.row + dir, from.col + dCol};
-        if (classify(board, piece, diagonal) == Occupant::Enemy) {
-            destinations.insert(diagonal);
+        const Position captureCell{from.row + dir, from.col + dCol};
+        if (classify(board, piece, captureCell) == Occupant::Enemy) {
+            destinations.insert(captureCell);
         }
     }
     return destinations;
