@@ -38,10 +38,6 @@ std::optional<Piece> GameSnapshot::pieceAt(Position cell) const {
 
 GameEngine::GameEngine(Board& board) : board_(board), arbiter_(board_) {}
 
-void GameEngine::addObserver(GameObserver& observer) {
-    subject_.addObserver(observer);
-}
-
 bool GameEngine::isCaptureTarget(Position destination,
                                  model::Color mover) const {
     const std::shared_ptr<Piece> occupant = board_.getPieceAt(destination);
@@ -50,7 +46,7 @@ bool GameEngine::isCaptureTarget(Position destination,
 
 void GameEngine::publishAccepted(const Piece& piece, Position from, Position to,
                                  bool isJump) {
-    subject_.publishMove(model::MoveEvent{
+    bus_.publish(model::MoveEvent{
         gameState_.elapsedMs(), piece.getColor(), piece.getKind(), from, to,
         !isJump && isCaptureTarget(to, piece.getColor()), isJump});
 }
@@ -118,7 +114,7 @@ void GameEngine::wait(int ms) {
         // resolve in one tick, and stopping early would lose the captures that
         // happened alongside the decisive one.
         if (report.captured) {
-            subject_.publishCapture(*report.captured);
+            bus_.publish(*report.captured);
             if (report.captured->kind == model::Kind::King) {
                 gameState_.markOver();
             }

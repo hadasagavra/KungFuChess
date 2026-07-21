@@ -204,7 +204,10 @@ TEST_CASE("a move reaches the mover's panel as notation and a clock") {
     place(board, 1, Color::White, Kind::Knight, Position{7, 1});
     GameEngine engine{board};
     Listeners listeners;
-    engine.addObserver(listeners.moveLog);
+    engine.events().subscribe<kfc::model::MoveEvent>(
+        [&listeners](const kfc::model::MoveEvent& event) {
+            listeners.moveLog.record(event);
+        });
 
     engine.wait(2500);  // let the game clock run before the command
     REQUIRE(engine.requestMove(Position{7, 1}, Position{5, 2}).isAccepted);
@@ -226,7 +229,10 @@ TEST_CASE("a panel shows the player's score") {
     place(board, 2, Color::Black, Kind::Queen, Position{0, 1});
     GameEngine engine{board};
     Listeners listeners;
-    engine.addObserver(listeners.scoreBoard);
+    engine.events().subscribe<kfc::model::CapturedPiece>(
+        [&listeners](const kfc::model::CapturedPiece& captured) {
+            listeners.scoreBoard.record(captured);
+        });
 
     REQUIRE(engine.requestMove(Position{0, 0}, Position{0, 1}).isAccepted);
     engine.wait(1000);  // complete the one-cell capture
@@ -250,7 +256,7 @@ TEST_CASE("a panel shows only as many recent moves as fit") {
 
     // Log more moves than the table has room for.
     for (int i = 0; i < capacity + 5; ++i) {
-        listeners.moveLog.onMove(kfc::model::MoveEvent{
+        listeners.moveLog.record(kfc::model::MoveEvent{
             i * 1000, Color::White, Kind::Pawn, Position{6, 0}, Position{5, 0},
             false, false});
     }

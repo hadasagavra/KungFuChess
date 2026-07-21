@@ -30,7 +30,7 @@ TEST_CASE("a new log is empty for both players") {
 TEST_CASE("a move is filed under the player who made it") {
     MoveLog log;
 
-    log.onMove(moveBy(Color::White, 1000));
+    log.record(moveBy(Color::White, 1000));
 
     CHECK(log.entriesFor(Color::White).size() == 1);
     CHECK(log.entriesFor(Color::Black).empty());
@@ -39,9 +39,9 @@ TEST_CASE("a move is filed under the player who made it") {
 TEST_CASE("each player's moves are kept in the order they were made") {
     MoveLog log;
 
-    log.onMove(moveBy(Color::White, 1000));
-    log.onMove(moveBy(Color::Black, 1500));
-    log.onMove(moveBy(Color::White, 2000));
+    log.record(moveBy(Color::White, 1000));
+    log.record(moveBy(Color::Black, 1500));
+    log.record(moveBy(Color::White, 2000));
 
     const auto& white = log.entriesFor(Color::White);
     REQUIRE(white.size() == 2);
@@ -56,7 +56,7 @@ TEST_CASE("each player's moves are kept in the order they were made") {
 TEST_CASE("a logged entry keeps the whole move, not just its time") {
     MoveLog log;
 
-    log.onMove(MoveEvent{4105, Color::White, Kind::Knight, Position{7, 1},
+    log.record(MoveEvent{4105, Color::White, Kind::Knight, Position{7, 1},
                          Position{5, 2}, true, false});
 
     const auto& entries = log.entriesFor(Color::White);

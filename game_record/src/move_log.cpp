@@ -5,7 +5,7 @@ namespace kfc::game_record {
 using model::Color;
 using model::MoveEvent;
 
-void MoveLog::onMove(const MoveEvent& event) {
+void MoveLog::record(const MoveEvent& event) {
     bucketFor(event.player).push_back(event);
 }
 

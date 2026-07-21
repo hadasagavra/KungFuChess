@@ -5,7 +5,7 @@ namespace kfc::game_record {
 using model::CapturedPiece;
 using model::Color;
 
-void ScoreBoard::onCapture(const CapturedPiece& captured) {
+void ScoreBoard::record(const CapturedPiece& captured) {
     // The victim's owner lost the piece, so the other player is the one who
     // gained its worth.
     totalFor(model::opponentOf(captured.color)) += model::costOf(captured.kind);

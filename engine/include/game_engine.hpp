@@ -6,8 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "engine/include/game_observer.hpp"
-#include "engine/include/game_subject.hpp"
+#include "bus/include/event_bus.hpp"
 #include "model/include/board.hpp"
 #include "model/include/game_event.hpp"
 #include "model/include/game_state.hpp"
@@ -62,11 +61,15 @@ class GameEngine {
 public:
     explicit GameEngine(model::Board& board);
 
-    // Register a listener for the game's events (moves ordered, pieces
-    // captured). The engine never learns what an observer does with them, so
-    // features like the moves log, the score, or a future network publisher are
-    // added without touching this class. The observer must outlive the engine.
-    void addObserver(GameObserver& observer);
+    // The bus the engine announces on, so listeners can subscribe to it. This
+    // exposes a connection point, not the engine's state: what comes back is a
+    // collaborator anyone may join, while the game's own data stays private.
+    //
+    // The engine publishes and never reads back, so it still learns nothing
+    // about who is listening -- the moves log, the score, or a future network
+    // publisher are added without touching this class. The bus lives as long as
+    // the engine does, and a subscriber must outlive it.
+    bus::EventBus& events() { return bus_; }
 
     MoveResult requestMove(model::Position source, model::Position destination);
     MoveResult requestJump(model::Position cell);
@@ -100,7 +103,7 @@ private:
     model::GameState gameState_;
     rules::RuleEngine ruleEngine_;
     realtime::RealTimeArbiter arbiter_;
-    GameSubject subject_;
+    bus::EventBus bus_;
 };
 
 }  // namespace kfc::engine

@@ -91,12 +91,21 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
     kfc::engine::GameEngine engine{parsed.board};
 
     // The moves log and the score are Business Logic that listens: the engine
-    // publishes what happened and never learns who is recording it. Adding a
-    // listener here is the whole cost of a new feature of this kind.
+    // publishes what happened and never learns who is recording it. Subscribing
+    // here is the whole cost of a new feature of this kind -- a sound player or
+    // an end-of-game animation would join the same bus without the engine, the
+    // log, or the score changing at all.
     kfc::game_record::MoveLog moveLog;
     kfc::game_record::ScoreBoard scoreBoard;
-    engine.addObserver(moveLog);
-    engine.addObserver(scoreBoard);
+    engine.events().subscribe<kfc::model::MoveEvent>(
+        [&moveLog](const kfc::model::MoveEvent& event) {
+            moveLog.record(event);
+            
+        });
+    engine.events().subscribe<kfc::model::CapturedPiece>(
+        [&scoreBoard](const kfc::model::CapturedPiece& captured) {
+            scoreBoard.record(captured);
+        });
 
     const kfc::view::RenderConfig config =
         kfc::view::defaultRenderConfig(assetsRoot, cellPx);
