@@ -8,18 +8,18 @@
 #include <string>
 #include <vector>
 
-#include "engine/include/game_engine.hpp"
-#include "input/include/board_mapper.hpp"
-#include "input/include/controller.hpp"
-#include "game_record/include/move_log.hpp"
-#include "game_record/include/score_board.hpp"
-#include "io/include/board_parser.hpp"
+#include "shared/logic/engine/include/game_engine.hpp"
+#include "client/input/include/board_mapper.hpp"
+#include "client/input/include/controller.hpp"
+#include "shared/logic/game_record/include/move_log.hpp"
+#include "shared/logic/game_record/include/score_board.hpp"
+#include "shared/logic/io/include/board_parser.hpp"
 #include "texttests/include/script_parser.hpp"
 #include "texttests/include/script_runner.hpp"
-#include "view/include/image_view.hpp"
-#include "view/include/render_config.hpp"
-#include "view/include/render_layout.hpp"
-#include "view/include/scene_translator.hpp"
+#include "client/view/include/image_view.hpp"
+#include "client/view/include/render_config.hpp"
+#include "client/view/include/render_layout.hpp"
+#include "client/view/include/scene_translator.hpp"
 
 //https://github.com/hadasagavra/KungFuChess
 
@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
         if (argc > 1 && std::string(argv[1]) == "--script") {
             return runScript(std::cin, std::cout);
         }
-        const std::string assetsRoot = (argc > 1) ? argv[1] : "assets";
+        const std::string assetsRoot = (argc > 1) ? argv[1] : "client/assets";
         return runGraphical(assetsRoot, kfc::view::defaultCellPx);
     } catch (const kfc::io::ParseError& e) {
         std::cout << "ERROR " << e.code << "\n";

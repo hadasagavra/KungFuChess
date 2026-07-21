@@ -2,10 +2,10 @@
 
 #include <cstdint>
 
-#include "model/include/piece.hpp"
-#include "view/include/animation_config.hpp"
-#include "view/include/animator.hpp"
-#include "view/include/game_snapshot.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "client/view/include/animation_config.hpp"
+#include "client/view/include/animator.hpp"
+#include "client/view/include/game_snapshot.hpp"
 
 using kfc::model::Color;
 using kfc::model::Kind;

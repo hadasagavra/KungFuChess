@@ -6,11 +6,11 @@
 #include <set>
 #include <vector>
 
-#include "engine/include/game_engine.hpp"
-#include "model/include/board.hpp"
-#include "model/include/game_event.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
+#include "shared/logic/engine/include/game_engine.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/model/include/game_event.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::engine::GameEngine;
 using kfc::engine::GameSnapshot;

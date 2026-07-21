@@ -4,7 +4,7 @@
 #include <sstream>
 #include <string>
 
-#include "model/include/position.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::model::Position;
 

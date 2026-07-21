@@ -1,8 +1,8 @@
 #include "third_party/doctest/doctest.h"
 
-#include "model/include/game_event.hpp"
-#include "model/include/piece.hpp"
-#include "game_record/include/score_board.hpp"
+#include "shared/logic/model/include/game_event.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/game_record/include/score_board.hpp"
 
 using kfc::model::CapturedPiece;
 using kfc::model::Color;

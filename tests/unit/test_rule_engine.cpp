@@ -3,10 +3,10 @@
 #include <cstdint>
 #include <memory>
 
-#include "model/include/board.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
-#include "rules/include/rule_engine.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
+#include "shared/logic/rules/include/rule_engine.hpp"
 
 using kfc::model::Board;
 using kfc::model::Color;

@@ -2,8 +2,8 @@
 
 #include <ostream>
 
-#include "engine/include/game_engine.hpp"
-#include "input/include/controller.hpp"
+#include "shared/logic/engine/include/game_engine.hpp"
+#include "client/input/include/controller.hpp"
 #include "texttests/include/script_parser.hpp"
 
 namespace kfc::texttests {

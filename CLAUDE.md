@@ -4,12 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-The restructuring around explicit design patterns and strict layer separation is essentially done: every module described under Project Structure exists at the repository root as `<module>/include` + `<module>/src`, and the CMake build compiles only those. The legacy `Business Logic/` directory (PascalCase files: `Board.cpp`, `Game.cpp`, `MoveRules.cpp`, …) is dead code — nothing includes it and the build never touches it. It stays only as a reference during the tail of the migration; do not add to it, do not fix bugs in it, and prefer deleting it once nothing is being cross-checked against it any more.
+The restructuring around explicit design patterns and strict layer separation is essentially done: every module described under Project Structure exists as `<module>/include` + `<module>/src`, and the CMake build compiles only those. The legacy `Business Logic/` directory (PascalCase files: `Board.cpp`, `Game.cpp`, `MoveRules.cpp`, …) is dead code — nothing includes it and the build never touches it. It stays only as a reference during the tail of the migration; do not add to it, do not fix bugs in it, and prefer deleting it once nothing is being cross-checked against it any more.
 
-Two structural decisions landed after the original layout and are now the rule:
+Three structural decisions landed after the original layout and are now the rule:
 
-- **`bus/` replaced the observer interface.** There was a `GameSubject` / `GameObserver` pair in `engine/`; it is gone. Game events now travel over a generic `EventBus` that names no game concept, so a new kind of event costs a struct plus whoever subscribes, instead of an edit to a contract every listener shares.
-- **`game_record/` holds the product-feature records.** The moves log and the score live in their own Business Logic module rather than inside the engine — they are listeners, not part of the rules.
+- **The tree is grouped by deployment target, not by module.** Modules no longer sit at the repository root; they live under `shared/` (what a client and a server both need) or `client/` (what only the client needs), with `server/` reserved for the networking layer. The layer each module belongs to did not change — only where it sits. Whenever you add a module, the first question is which of those three owns it.
+- **`shared/bus/` replaced the observer interface.** There was a `GameSubject` / `GameObserver` pair in `engine/`; it is gone. Game events now travel over a generic `EventBus` that names no game concept, so a new kind of event costs a struct plus whoever subscribes, instead of an edit to a contract every listener shares.
+- **`game_record/` holds the product-feature records.** The moves log and the score live in their own Business Logic module rather than inside the engine — they are listeners, not part of the rules. They sit under `shared/logic/` because a server would compute the same score from the same events.
 
 ## Game Overview
 
@@ -35,55 +36,61 @@ A non-functional/aspirational goal is scalability toward millions of concurrent 
 
 ## Project Structure
 
-The source modules live at the repository root, each mapping onto one of the architectural layers; `tests/` mirrors them. Add new code to the module that matches its responsibility — never widen a module's job to avoid creating the right one.
+The tree is grouped by **deployment target** — `shared/` (client and server both need it), `client/` (client only), `server/` (server only) — and within that by module, each mapping onto one of the architectural layers; `tests/` mirrors them. Add new code to the module that matches its responsibility — never widen a module's job to avoid creating the right one.
 
 ```
-model/                # Business Logic — pure domain data & state
-  position            # a board coordinate
-  piece               # piece identity (type, color)
-  board               # the grid of pieces + safe accessors
-  board_errors        # the board's error/result vocabulary
-  game_state          # authoritative game state (no orchestration)
-  game_event          # MoveEvent / CapturedPiece — what happened, in domain terms
-rules/                # Business Logic — the rules of the game
-  piece_rules         # per-type movement/legality rules
-  rule_engine         # orchestrates the rules into a legality decision
-realtime/             # Business Logic — the real-time / simultaneous mechanics
-  motion              # travel time, cooldown, jump durations
-  real_time_arbiter   # pending moves/jumps, the clock, arrival resolution
-engine/               # Business Logic — top-level coordination
-  game_engine         # drives state + rules + realtime; the logic entry point.
-                      # Owns an EventBus and publishes onto it; knows no listener.
-game_record/          # Business Logic — the product-feature records (listeners)
-  move_log            # the moves log, fed by MoveEvent
-  score_board         # captured-piece cost totals, fed by CapturedPiece
-bus/                  # layer-neutral infrastructure — knows no game concept
-  event_bus           # generic pub/sub; any layer may depend on it (header-only)
-input/                # GUI (input side) — no game rules
-  board_mapper        # pixel <-> cell mapping (display-coupled)
-  controller          # turns raw input into engine commands; owns the selection
-io/                   # serialization — text in/out (not display, not rules)
-  board_parser        # text -> board + commands
-  board_printer       # board -> text
-  piece_codec         # the single place letters <-> Kind/Color is encoded
-  move_notation       # MoveEvent -> "Nxc6"
-  text                # shared text tokens
-view/                 # GUI (output side) — display only
-  scene_translator    # the GUI<-Logic seam: engine snapshot -> GameSnapshot
-  game_snapshot       # the flat, drawable description of one frame
-  animator            # sprite animation state machine (display-only)
-  animation_config    # + animation_config_store: graphics half of config.json
-  asset_paths         # where a sprite for a piece/state lives
-  render_config       # colors, cell size, panel sizes
-  render_layout       # one layout answer shared by renderer and mapper
-  renderer            # draws a GameSnapshot (graphics)
-  image_view          # window + mouse loop (graphics)
-  demo/render_demo    # renders a starting position to PNG; visual check only
+shared/                 # everything a client and a server both need
+  error.hpp             # kfc::Error, the base exception; used by any layer
+  bus/                  # layer-neutral infrastructure — knows no game concept
+    event_bus           # generic pub/sub; any layer may depend on it (header-only)
+  logic/                # Business Logic — the whole of it
+    model/              # pure domain data & state
+      position          # a board coordinate
+      piece             # piece identity (type, color)
+      board             # the grid of pieces + safe accessors
+      board_errors      # the board's error/result vocabulary
+      game_state        # authoritative game state (no orchestration)
+      game_event        # MoveEvent / CapturedPiece — what happened, in domain terms
+    rules/              # the rules of the game
+      piece_rules       # per-type movement/legality rules
+      rule_engine       # orchestrates the rules into a legality decision
+    realtime/           # the real-time / simultaneous mechanics
+      motion            # travel time, cooldown, jump durations
+      real_time_arbiter # pending moves/jumps, the clock, arrival resolution
+    engine/             # top-level coordination
+      game_engine       # drives state + rules + realtime; the logic entry point.
+                        # Owns an EventBus and publishes onto it; knows no listener.
+    game_record/        # the product-feature records (listeners)
+      move_log          # the moves log, fed by MoveEvent
+      score_board       # captured-piece cost totals, fed by CapturedPiece
+    io/                 # serialization — text in/out (not display, not rules)
+      board_parser      # text -> board + commands
+      board_printer     # board -> text
+      piece_codec       # the single place letters <-> Kind/Color is encoded
+      move_notation     # MoveEvent -> "Nxc6"
+      text              # shared text tokens
+client/                 # the GUI — display and input only, no game rules
+  input/                # GUI (input side)
+    board_mapper        # pixel <-> cell mapping (display-coupled)
+    controller          # turns raw input into engine commands; owns the selection
+  view/                 # GUI (output side)
+    scene_translator    # the GUI<-Logic seam: engine snapshot -> GameSnapshot
+    game_snapshot       # the flat, drawable description of one frame
+    animator            # sprite animation state machine (display-only)
+    animation_config    # + animation_config_store: graphics half of config.json
+    asset_paths         # where a sprite for a piece/state lives
+    render_config       # colors, cell size, panel sizes
+    render_layout       # one layout answer shared by renderer and mapper
+    renderer            # draws a GameSnapshot (graphics)
+    image_view          # window + mouse loop (graphics)
+    demo/render_demo    # renders a starting position to PNG; visual check only
+  assets/               # board and piece sprites
+server/                 # the networking / coordination layer
+  app/                  # empty — nothing is implemented yet
 texttests/            # scripted end-to-end test harness
   script_parser
   script_runner
 third_party/          # vendored: doctest, img (Img + MouseWindow), opencv
-assets/               # board and piece sprites
 main.cpp              # composition root wiring the layers together
 
 tests/
@@ -98,7 +105,9 @@ tests/
     test_script_parser
 ```
 
-**Layer mapping:** `model` + `rules` + `realtime` + `engine` + `game_record` are Business Logic; `input` + `view` are the GUI. `io` is a serialization boundary, not a rules or display layer. `bus` is neutral infrastructure: it names no game concept, so every layer — including a future server — may depend on it, and it depends on none.
+**Layer mapping:** everything under `shared/logic/` — `model` + `rules` + `realtime` + `engine` + `game_record` — is Business Logic; `client/input` + `client/view` are the GUI. `shared/logic/io` is a serialization boundary, not a rules or display layer. `shared/bus` is neutral infrastructure: it names no game concept, so every layer — including a future server — may depend on it, and it depends on none.
+
+Note that the two groupings answer different questions and must both hold: `shared` vs `client` vs `server` says *who ships this code*, the layer says *what it is allowed to know*. `shared/` is not a synonym for Business Logic — `bus` is shared and is not Business Logic — and a module being client-only never licenses it to hold a game rule.
 
 ### How events flow
 
@@ -118,10 +127,12 @@ ctest --test-dir build     # run the unit tests
 ./build/kfc --script       # text harness, reads a board + script from stdin
 ```
 
+`kfc` and `render_demo` load sprites from `client/assets` by default, resolved relative to the working directory — run them from the repository root, or pass an assets root as the first argument.
+
 Targets, and why they are split:
 
-- `kfc_lib` — all Business Logic + `input` + `io` + `texttests`. Globbed; no graphics.
-- `kfc_view_core` — the pure half of `view`: the seam, the Animator, asset paths, the config loader. Links `kfc_lib`, **not** OpenCV, so the unit tests can link it.
+- `kfc_lib` — all of `shared/logic/` + `client/input` + `texttests`. Globbed; no graphics.
+- `kfc_view_core` — the pure half of `client/view`: the seam, the Animator, asset paths, the config loader. Links `kfc_lib`, **not** OpenCV, so the unit tests can link it.
 - `kfc_view` — the drawing half: `Renderer`, `ImageView`, and the `Img`/`MouseWindow` wrapper. The only target that links OpenCV. Sources are listed explicitly, not globbed, because which side a file lands on is a design decision.
 - `kfc` — the app; `render_demo` — the PNG visual check; `unit_tests` — the doctest suite.
 
@@ -129,14 +140,14 @@ The one-way dependency (`kfc_view` → `kfc_view_core`) makes "graphics only via
 
 ## Naming conventions
 
-- **Files & directories:** snake_case, one module per name, paired `.hpp` / `.cpp` (header-only modules may omit the `.cpp` — e.g. `bus/event_bus`). Test files are `.cpp` only, named `test_<module>`.
+- **Files & directories:** snake_case, one module per name, paired `.hpp` / `.cpp` (header-only modules may omit the `.cpp` — e.g. `shared/bus/event_bus`). Test files are `.cpp` only, named `test_<module>`.
 - **Types** (classes, structs, enums): PascalCase — even though the filename is snake_case (`game_engine.hpp` → `class GameEngine`).
 - **Enum values:** PascalCase (e.g. `Kind::Knight`, `MoveReason::Ok`).
 - **Functions & variables:** camelCase; private members carry a trailing underscore (`board_`).
 - **Constants:** camelCase, with no prefix — e.g. `squareTravelMs`, `msPerCell`, `defaultCellPx`. Do NOT use a `k` prefix (`kSquareTravelMs` is wrong).
 - **Getters:** get-prefixed camelCase (`getKind()`, `getState()`); conversions are `toString()`. Board dimensions are `width()` / `height()`.
 - **Namespaces:** `kfc` at the root, one nested namespace per module (`kfc::model`, `kfc::rules`, `kfc::realtime`, `kfc::engine`, `kfc::game_record`, `kfc::input`, `kfc::view`, `kfc::io`, `kfc::bus`, `kfc::texttests`). Business Logic namespaces must never `#include` from `input`/`view`.
-- **Includes** are repo-root relative, including the sub-directory: `#include "model/include/piece.hpp"`.
+- **Includes** are repo-root relative and spell out the full path from the deployment-target root down through `include/`: `#include "shared/logic/model/include/piece.hpp"`, `#include "client/view/include/renderer.hpp"`. Never a relative `../` path.
 
 **Module internal structure:** every architectural module is strictly divided into `include/` (all `.hpp`) and `src/` (all `.cpp`). Do not place `.hpp` or `.cpp` files directly in the root of a module folder.
 
@@ -144,7 +155,7 @@ The one-way dependency (`kfc_view` → `kfc_view_core`) makes "graphics only via
 
 Beyond layer separation, all code — Business Logic above all — must follow:
 
-- **DRY** — every piece of logic/domain knowledge is implemented in exactly one place. If a fact (e.g. "which letters are valid piece types") is needed in two places, define it once and reference it from both (that fact lives in `io/piece_codec`); do not let two independent switch/if chains encode the same rule, since they will drift out of sync.
+- **DRY** — every piece of logic/domain knowledge is implemented in exactly one place. If a fact (e.g. "which letters are valid piece types") is needed in two places, define it once and reference it from both (that fact lives in `shared/logic/io/piece_codec`); do not let two independent switch/if chains encode the same rule, since they will drift out of sync.
 - **SRP** — every function does exactly one thing. A function that validates, parses, transforms, and mutates state in one body should be split into named steps, each doing one of those things.
 - **No hardcoded constants or strings in Business Logic** — piece-type letters, color markers, the empty-cell token, board dimensions, cooldown durations, piece costs, etc. must live in named constants/enums/config, never as inline literals (`'K'`, `"."`, `'w'`, `100`) scattered through the logic.
 - **Encapsulation** — classes and functions expose behavior, not internal representation. Don't return raw internal containers (e.g. a `vector<vector<string>>` board) from an accessor and let callers pattern-match against the encoding; expose purpose-built methods instead.

@@ -1,7 +1,7 @@
 #include <doctest/doctest.h>
 
-#include "input/include/board_mapper.hpp"
-#include "model/include/position.hpp"
+#include "client/input/include/board_mapper.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::input::BoardMapper;
 using kfc::model::Position;

@@ -16,15 +16,18 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # kfc_lib: all Business Logic + GUI + io + texttests sources (everything except
 # main.cpp and the tests). The app and the tests both link this, so each source
 # is compiled once.
+#
+# The sources are grouped by deployment target: shared/logic is the code a
+# future server and the client both need, client/ is client-only.
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE KFC_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/model/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/rules/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/realtime/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/engine/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/game_record/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/input/src/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/io/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/logic/model/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/logic/rules/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/logic/realtime/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/logic/engine/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/logic/game_record/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/shared/logic/io/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/input/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/texttests/src/*.cpp"
 )
 
@@ -81,11 +84,11 @@ set(OPENCV_DLL "$<IF:$<CONFIG:Debug>,${OPENCV_DIR}/bin/opencv_world451d.dll,${OP
 # instead of being inferred from a wildcard.
 # ---------------------------------------------------------------------------
 add_library(kfc_view_core STATIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/animation_config_store.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/animator.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/asset_paths.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/render_layout.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/scene_translator.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/animation_config_store.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/animator.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/asset_paths.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/render_layout.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/scene_translator.cpp")
 
 # kfc_lib supplies the domain types a GameSnapshot references (Piece, Position,
 # the engine snapshot the seam reads). Nothing graphical is added here -- that
@@ -98,8 +101,8 @@ target_link_libraries(kfc_view_core PUBLIC kfc_lib)
 # stay out of our /W4.
 # ---------------------------------------------------------------------------
 add_library(kfc_view STATIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/image_view.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/view/src/renderer.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/image_view.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/renderer.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img/img.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/img/mouse_window.cpp")
 
@@ -125,7 +128,7 @@ add_custom_command(TARGET kfc POST_BUILD
 # render_demo: a small driver that builds a starting-position GameSnapshot and
 # renders it to a PNG. Visual check for the view layer; not part of the app.
 # ---------------------------------------------------------------------------
-add_executable(render_demo "${CMAKE_CURRENT_SOURCE_DIR}/view/demo/render_demo.cpp")
+add_executable(render_demo "${CMAKE_CURRENT_SOURCE_DIR}/client/view/demo/render_demo.cpp")
 target_link_libraries(render_demo PRIVATE kfc_view)
 add_custom_command(TARGET render_demo POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different

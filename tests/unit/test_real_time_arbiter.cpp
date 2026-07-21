@@ -4,11 +4,11 @@
 #include <memory>
 #include <vector>
 
-#include "model/include/board.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
-#include "realtime/include/motion.hpp"
-#include "realtime/include/real_time_arbiter.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
+#include "shared/logic/realtime/include/motion.hpp"
+#include "shared/logic/realtime/include/real_time_arbiter.hpp"
 
 using kfc::model::Board;
 using kfc::model::Color;

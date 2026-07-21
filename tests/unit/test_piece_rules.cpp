@@ -4,10 +4,10 @@
 #include <memory>
 #include <set>
 
-#include "model/include/board.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
-#include "rules/include/piece_rules.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
+#include "shared/logic/rules/include/piece_rules.hpp"
 
 using kfc::model::Board;
 using kfc::model::Color;

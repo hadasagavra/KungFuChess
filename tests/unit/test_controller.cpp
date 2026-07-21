@@ -3,12 +3,12 @@
 #include <cstdint>
 #include <memory>
 
-#include "engine/include/game_engine.hpp"
-#include "input/include/board_mapper.hpp"
-#include "input/include/controller.hpp"
-#include "model/include/board.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
+#include "shared/logic/engine/include/game_engine.hpp"
+#include "client/input/include/board_mapper.hpp"
+#include "client/input/include/controller.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::engine::GameEngine;
 using kfc::input::BoardMapper;

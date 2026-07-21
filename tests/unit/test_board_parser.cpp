@@ -3,10 +3,10 @@
 #include <sstream>
 #include <string>
 
-#include "io/include/board_parser.hpp"
-#include "model/include/board.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
+#include "shared/logic/io/include/board_parser.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::io::ParsedInput;
 using kfc::io::ParseError;

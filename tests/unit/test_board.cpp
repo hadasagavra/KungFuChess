@@ -3,10 +3,10 @@
 #include <memory>
 #include <stdexcept>
 
-#include "model/include/board.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
-#include "model/include/board_errors.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
+#include "shared/logic/model/include/board_errors.hpp"
 
 using kfc::model::Board;
 using kfc::model::Color;

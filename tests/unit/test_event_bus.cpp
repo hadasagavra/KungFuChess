@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "bus/include/event_bus.hpp"
+#include "shared/bus/include/event_bus.hpp"
 
 using kfc::bus::EventBus;
 

@@ -1,7 +1,7 @@
 #include "third_party/doctest/doctest.h"
 
-#include "view/include/render_config.hpp"
-#include "view/include/render_layout.hpp"
+#include "client/view/include/render_config.hpp"
+#include "client/view/include/render_layout.hpp"
 
 using kfc::view::computeLayout;
 using kfc::view::defaultRenderConfig;

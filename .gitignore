@@ -61,4 +61,4 @@ Thumbs.db
 third_party/opencv/
 
 # Generated render output (demo/smoke artifacts)
-assets/_*.png
+client/assets/_*.png

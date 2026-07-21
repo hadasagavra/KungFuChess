@@ -2,7 +2,7 @@
 
 #include <variant>
 
-#include "io/include/board_printer.hpp"
+#include "shared/logic/io/include/board_printer.hpp"
 namespace kfc::texttests {
 namespace {
 

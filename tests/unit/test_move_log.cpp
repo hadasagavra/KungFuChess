@@ -1,9 +1,9 @@
 #include "third_party/doctest/doctest.h"
 
-#include "model/include/game_event.hpp"
-#include "game_record/include/move_log.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
+#include "shared/logic/model/include/game_event.hpp"
+#include "shared/logic/game_record/include/move_log.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::model::Color;
 using kfc::model::Kind;

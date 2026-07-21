@@ -5,15 +5,15 @@
 #include <set>
 #include <string>
 
-#include "engine/include/game_engine.hpp"
-#include "model/include/board.hpp"
-#include "game_record/include/move_log.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
-#include "game_record/include/score_board.hpp"
-#include "view/include/render_config.hpp"
-#include "view/include/render_layout.hpp"
-#include "view/include/scene_translator.hpp"
+#include "shared/logic/engine/include/game_engine.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/game_record/include/move_log.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
+#include "shared/logic/game_record/include/score_board.hpp"
+#include "client/view/include/render_config.hpp"
+#include "client/view/include/render_layout.hpp"
+#include "client/view/include/scene_translator.hpp"
 
 using kfc::engine::GameEngine;
 using kfc::model::Board;

@@ -2,8 +2,8 @@
 
 #include <cstdint>
 
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::model::Color;
 using kfc::model::Kind;

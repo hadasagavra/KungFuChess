@@ -5,11 +5,11 @@
 #include <sstream>
 #include <string>
 
-#include "engine/include/game_engine.hpp"
-#include "io/include/board_printer.hpp"
-#include "model/include/board.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
+#include "shared/logic/engine/include/game_engine.hpp"
+#include "shared/logic/io/include/board_printer.hpp"
+#include "shared/logic/model/include/board.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::engine::GameSnapshot;
 using kfc::model::Board;

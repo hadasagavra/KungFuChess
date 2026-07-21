@@ -3,7 +3,7 @@
     #include <exception>
     #include <vector>
 
-    #include "io/include/text.hpp"
+    #include "shared/logic/io/include/text.hpp"
 
     namespace kfc::texttests {
     namespace {

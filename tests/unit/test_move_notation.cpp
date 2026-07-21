@@ -1,10 +1,10 @@
 #include "third_party/doctest/doctest.h"
 
-#include "io/include/move_notation.hpp"
-#include "io/include/piece_codec.hpp"
-#include "model/include/game_event.hpp"
-#include "model/include/piece.hpp"
-#include "model/include/position.hpp"
+#include "shared/logic/io/include/move_notation.hpp"
+#include "shared/logic/io/include/piece_codec.hpp"
+#include "shared/logic/model/include/game_event.hpp"
+#include "shared/logic/model/include/piece.hpp"
+#include "shared/logic/model/include/position.hpp"
 
 using kfc::io::kindLetter;
 using kfc::io::moveNotation;
