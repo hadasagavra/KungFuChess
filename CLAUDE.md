@@ -28,7 +28,7 @@ The project is organized into three layers with strict separation. This is the s
 
 - **Business Logic** — the heart of the game, with zero dependency on display or networking: piece rules, movement, cooldown, capture logic, and win detection live here and nowhere else.
 - **GUI** — display only. Renders board state and collects input. Contains no game rules.
-- **Server** — the networking / coordination layer between players. Not implemented yet.
+- **Server** — the networking / coordination layer between players. The authoritative host (`server/app/game_session`) exists: it owns the single engine, seats clients by colour, and relays typed messages over a transport seam. The socket transport itself is not wired yet.
 
 The guiding principle: Business Logic must be completely decoupled from GUI and Server. Never mix game rules into display or network code. If the layers are designed this way from the start, the test structure and separation fall into place almost automatically. When making changes, treat any leak of game rules into the GUI or Server layer as a design defect to be corrected, not accommodated.
 
@@ -67,8 +67,12 @@ shared/                 # everything a client and a server both need
       board_parser      # text -> board + commands
       board_printer     # board -> text
       piece_codec       # the single place letters <-> Kind/Color is encoded
-      move_notation     # MoveEvent -> "Nxc6"
-      text              # shared text tokens
+      move_notation     # MoveEvent -> "Nxc6" (+ squareName/squareFromName)
+      command_notation  # PlayerCommand <-> "WQe2e5" (a client's move/jump)
+      event_codec       # MoveEvent / CapturedPiece <-> wire text
+      state_codec       # GameSnapshot <-> a whole-frame wire text
+      wire_message      # the typed message variant + the one encode/decode seam
+      text              # shared text tokens (+ flag helpers)
 client/                 # the GUI — display and input only, no game rules
   input/                # GUI (input side)
     board_mapper        # pixel <-> cell mapping (display-coupled)
@@ -86,8 +90,12 @@ client/                 # the GUI — display and input only, no game rules
     image_view          # window + mouse loop (graphics)
     demo/render_demo    # renders a starting position to PNG; visual check only
   assets/               # board and piece sprites
-server/                 # the networking / coordination layer
-  app/                  # empty — nothing is implemented yet
+server/                 # the networking / coordination layer (Server layer)
+  net/                  # the transport
+    message_transport   # abstract send/broadcast seam (header-only); no game concept
+  app/                  # the coordinator
+    game_session        # authoritative host: owns the engine, seats clients by
+                        # colour, routes typed WireMessages with std::visit
 texttests/            # scripted end-to-end test harness
   script_parser
   script_runner
@@ -102,8 +110,11 @@ tests/
     test_move_log  test_score_board
     test_board_mapper  test_controller
     test_board_parser  test_board_printer  test_move_notation
+    test_command_notation  test_event_codec  test_state_codec
     test_scene_translator  test_animator  test_render_layout
     test_script_parser
+  integration/        # Server level: a GameSession driven over a fake transport
+    test_game_session
 ```
 
 **Layer mapping:** everything under `shared/logic/` — `model` + `rules` + `realtime` + `engine` + `game_record` — is Business Logic; `client/input` + `client/view` are the GUI. `shared/logic/io` is a serialization boundary, not a rules or display layer. `shared/bus` is neutral infrastructure: it names no game concept, so every layer — including a future server — may depend on it, and it depends on none.
@@ -133,6 +144,7 @@ ctest --test-dir build     # run the unit tests
 Targets, and why they are split:
 
 - `kfc_lib` — all of `shared/logic/` + `client/input` + `texttests`. Globbed; no graphics.
+- `kfc_server_lib` — the Server layer (`server/net` + `server/app`). Links `kfc_lib`, never OpenCV (a server has no display). Globbed; the integration tests link it.
 - `kfc_view_core` — the pure half of `client/view`: the seam, the Animator, asset paths, the config loader. Links `kfc_lib`, **not** OpenCV, so the unit tests can link it.
 - `kfc_view` — the drawing half: `Renderer`, `ImageView`, and the `Img`/`MouseWindow` wrapper. The only target that links OpenCV. Sources are listed explicitly, not globbed, because which side a file lands on is a design decision.
 - `kfc` — the app; `render_demo` — the PNG visual check; `unit_tests` — the doctest suite.
@@ -147,7 +159,7 @@ The one-way dependency (`kfc_view` → `kfc_view_core`) makes "graphics only via
 - **Functions & variables:** camelCase; private members carry a trailing underscore (`board_`).
 - **Constants:** camelCase, with no prefix — e.g. `squareTravelMs`, `msPerCell`, `defaultCellPx`. Do NOT use a `k` prefix (`kSquareTravelMs` is wrong).
 - **Getters:** get-prefixed camelCase (`getKind()`, `getState()`); conversions are `toString()`. Board dimensions are `width()` / `height()`.
-- **Namespaces:** `kfc` at the root, one nested namespace per module (`kfc::model`, `kfc::rules`, `kfc::realtime`, `kfc::engine`, `kfc::game_record`, `kfc::input`, `kfc::view`, `kfc::io`, `kfc::bus`, `kfc::texttests`). Business Logic namespaces must never `#include` from `input`/`view`.
+- **Namespaces:** `kfc` at the root, one nested namespace per module (`kfc::model`, `kfc::rules`, `kfc::realtime`, `kfc::engine`, `kfc::game_record`, `kfc::input`, `kfc::view`, `kfc::io`, `kfc::bus`, `kfc::server`, `kfc::texttests`). `kfc::server` covers both server sub-modules (`net` + `app`); they are one architectural layer, so they share the namespace. Business Logic namespaces must never `#include` from `input`/`view`/`server`.
 - **Includes** are repo-root relative and spell out the full path from the deployment-target root down through `include/`: `#include "shared/logic/model/include/piece.hpp"`, `#include "client/view/include/renderer.hpp"`. Never a relative `../` path.
 
 **Module internal structure:** every architectural module is strictly divided into `include/` (all `.hpp`) and `src/` (all `.cpp`). Do not place `.hpp` or `.cpp` files directly in the root of a module folder.

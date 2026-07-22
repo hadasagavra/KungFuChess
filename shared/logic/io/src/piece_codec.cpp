@@ -33,11 +33,11 @@ std::optional<model::Color> colorOf(char c) {
     return std::nullopt;
 }
 
-char charOf(model::Color color) {
+}  // namespace
+
+char colorLetter(model::Color color) {
     return color == model::Color::White ? whiteChar : blackChar;
 }
-
-}  // namespace
 
 char kindLetter(model::Kind kind) {
     for (const KindLetter& entry : kindLetters) {
@@ -60,7 +60,7 @@ std::optional<PieceCode> pieceFromToken(const std::string& token) {
 
 std::string encodePieceToken(model::Color color, model::Kind kind) {
     std::string token;
-    token += charOf(color);
+    token += colorLetter(color);
     token += kindLetter(kind);
     return token;
 }

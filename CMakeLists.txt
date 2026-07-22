@@ -51,6 +51,24 @@ if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ---------------------------------------------------------------------------
+# kfc_server_lib: the Server layer -- the networking/coordination code. It links
+# kfc_lib (it drives a GameEngine and speaks the io wire protocol) and NEVER
+# OpenCV: a server has no display. Kept a separate target so the tests can link
+# the session without pulling in the app's socket main.
+#
+# Globbed like kfc_lib. server/net today is header-only (the transport interface),
+# so the glob picks up server/app's sources; the pattern is ready for when the
+# net side gains a .cpp (the WebSocket transport).
+# ---------------------------------------------------------------------------
+file(GLOB_RECURSE KFC_SERVER_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/server/net/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/server/app/src/*.cpp"
+)
+
+add_library(kfc_server_lib STATIC ${KFC_SERVER_SOURCES})
+target_link_libraries(kfc_server_lib PUBLIC kfc_lib)
+
+# ---------------------------------------------------------------------------
 # OpenCV: a vendored, prebuilt MSVC /MD build under third_party/opencv. It ships
 # no OpenCVConfig.cmake, so find_package won't work -- we wire include/lib/dll by
 # hand. ONLY the view layer links OpenCV; the Business Logic never sees it.
@@ -139,17 +157,21 @@ add_custom_command(TARGET render_demo POST_BUILD
 # unit_tests: the doctest suite. test_main.cpp provides doctest's entry point;
 # every tests/unit/*.cpp registers TEST_CASEs.
 # ---------------------------------------------------------------------------
+# Unit tests plus the server-level integration tests (tests/integration): both
+# are doctest cases, so one binary runs them all. The folders keep the levels
+# apart -- unit tests a module in isolation, integration drives a GameSession.
 file(GLOB TEST_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/*.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/unit/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/*.cpp")
 
 add_executable(unit_tests
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_main.cpp"
     ${TEST_SOURCES}
 )
 # kfc_view_core carries the pure view modules (the seam, the Animator, the asset
-# paths, the config loader). Linking it here keeps them under unit test without
-# dragging OpenCV into the test binary.
-target_link_libraries(unit_tests PRIVATE kfc_lib kfc_view_core)
+# paths, the config loader). kfc_server_lib carries the GameSession the
+# integration tests drive. Neither drags OpenCV into the test binary.
+target_link_libraries(unit_tests PRIVATE kfc_lib kfc_view_core kfc_server_lib)
 
 # doctest is vendored under third_party/. The tests include it two ways:
 #   "third_party/doctest/doctest.h"  (resolved via the repo root, already set)

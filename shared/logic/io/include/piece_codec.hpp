@@ -23,6 +23,11 @@ struct PieceCode {
 // notation alike -- reads the same mapping instead of spelling out its own.
 char kindLetter(model::Kind kind);
 
+// The letter that stands for a colour ('w' / 'b'). Exposed for the same reason
+// as kindLetter: a caller that needs only the colour letter (the ROLE message
+// names a player by it) reads this one mapping instead of re-deriving it.
+char colorLetter(model::Color color);
+
 // The single source of truth for the board's text encoding, in both directions,
 // so BoardPrinter and BoardParser never encode the piece letters independently.
 bool isEmptyToken(const std::string& token);
