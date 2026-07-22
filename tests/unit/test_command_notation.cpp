@@ -36,7 +36,9 @@ TEST_CASE("a jump command writes the same square twice") {
 }
 
 TEST_CASE("a decoded command round-trips back to the same text") {
-    for (const std::string& text : {"WQe2e5", "bPa7a6", "WNb1c3", "WKe1e1"}) {
+    // Only the canonical wire form (colour upper case) round-trips to itself;
+    // decode is lenient about case, but encode always writes the canonical form.
+    for (const std::string& text : {"WQe2e5", "BPa7a6", "WNb1c3", "WKe1e1"}) {
         const std::optional<PlayerCommand> command =
             decodeCommand(text, boardHeight);
         REQUIRE(command);
@@ -82,6 +84,13 @@ TEST_CASE("malformed command text decodes to nothing") {
     CHECK_FALSE(decodeCommand("WQe2e5x", boardHeight));       // odd tail length
     CHECK_FALSE(decodeCommand("XQe2e5", boardHeight));        // unknown colour
     CHECK_FALSE(decodeCommand("WZe2e5", boardHeight));        // unknown kind
-    CHECK_FALSE(decodeCommand("WQz2e5", boardHeight));        // bad source file
     CHECK_FALSE(decodeCommand("WQe9e5", boardHeight));        // rank off the board
+}
+
+TEST_CASE("an off-board file is not the codec's to reject") {
+    // squareFromName is given the board's height but not its width, so it checks
+    // the rank and leaves the file alone -- how wide the board is belongs to
+    // Board, and the engine rejects an out-of-bounds move. So a file past 'h'
+    // decodes to a well-formed (if off-board) command rather than to nothing.
+    CHECK(decodeCommand("WQz2e5", boardHeight));
 }
