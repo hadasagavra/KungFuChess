@@ -28,7 +28,7 @@ The project is organized into three layers with strict separation. This is the s
 
 - **Business Logic** — the heart of the game, with zero dependency on display or networking: piece rules, movement, cooldown, capture logic, and win detection live here and nowhere else.
 - **GUI** — display only. Renders board state and collects input. Contains no game rules.
-- **Server** — the networking / coordination layer between players. The authoritative host (`server/app/game_session`) exists: it owns the single engine, seats clients by colour, and relays typed messages over a transport seam. The socket transport itself is not wired yet.
+- **Server** — the networking / coordination layer between players. Implemented: the authoritative host (`server/app/game_session`) owns the single engine and seats clients by colour, and a real WebSocket transport (`server/net/websocket_server`) drives it from the `kfc_server` executable. Clients reach it with `kfc --connect host:port`; local play uses the same protocol over an in-process loopback.
 
 The guiding principle: Business Logic must be completely decoupled from GUI and Server. Never mix game rules into display or network code. If the layers are designed this way from the start, the test structure and separation fall into place almost automatically. When making changes, treat any leak of game rules into the GUI or Server layer as a design defect to be corrected, not accommodated.
 
@@ -82,8 +82,11 @@ client/                 # client-only code: the GUI plus the client's networking
   net/                  # the client's networking runtime (kfc::net)
     client_game         # the seam the frame loop drives (GameAccess + advance/snapshot)
     remote_game         # a client's replica-backed view; sends commands, applies state
+    endpoint            # parse "host:port" for --connect (header-only)
     loopback_transport  # a MessageTransport that hands server output to one client
     loopback_game       # hosts a GameSession + RemoteGame in-process (two seats)
+    websocket_client    # a WebSocket connection to a server (pimpl); feeds RemoteGame
+    networked_game      # ClientGame over a socket: sibling of loopback_game
   view/                 # GUI (output side)
     scene_translator    # the GUI<-Logic seam: engine snapshot -> GameSnapshot
     game_snapshot       # the flat, drawable description of one frame
@@ -100,14 +103,19 @@ client/                 # client-only code: the GUI plus the client's networking
 server/                 # the networking / coordination layer (Server layer)
   net/                  # the transport
     message_transport   # abstract send/broadcast seam (header-only); no game concept
+    websocket_server    # a MessageTransport over a real WebSocket (asio/websocketpp,
+                        # hidden behind a pimpl); poll()-driven, single-threaded
   app/                  # the coordinator
     game_session        # authoritative host: owns the engine, seats clients by
                         # colour, routes typed WireMessages with std::visit
+    server_main.cpp     # the server executable's root (no window, no OpenCV)
 texttests/            # scripted end-to-end test harness
   script_parser
   script_runner
-third_party/          # vendored: doctest, img (Img + MouseWindow), opencv
-main.cpp              # composition root wiring the layers together
+config/               # start_position.txt: the opening board, loaded by both roots
+third_party/          # vendored: doctest, img (Img + MouseWindow), opencv,
+                      #   asio + websocketpp (header-only WebSocket stack)
+main.cpp              # the client composition root wiring the layers together
 
 tests/
   test_main.cpp       # doctest entry point
@@ -117,11 +125,13 @@ tests/
     test_move_log  test_score_board
     test_board_mapper  test_controller
     test_board_parser  test_board_printer  test_move_notation
-    test_command_notation  test_event_codec  test_state_codec
+    test_command_notation  test_event_codec  test_state_codec  test_endpoint
     test_scene_translator  test_animator  test_render_layout
     test_script_parser
   integration/        # Server + client-runtime level, over a fake/loopback transport
     test_game_session  test_loopback_game
+  socket/             # a real WebSocket round-trip; its own binary (socket_tests)
+    test_websocket_roundtrip
 ```
 
 **Layer mapping:** everything under `shared/logic/` — `model` + `rules` + `realtime` + `engine` + `game_record` — is Business Logic; `client/input` + `client/view` are the GUI. `client/net` is the client's networking runtime — the client counterpart to `server/`: it holds no game rules (it keeps a replica the server fills and reuses `RuleEngine` only to hint legal-move highlights), and it is what lets the GUI drive either a local or a remote authority. `shared/logic/io` is a serialization boundary, not a rules or display layer. `shared/bus` is neutral infrastructure: it names no game concept, so every layer — including a future server — may depend on it, and it depends on none.
@@ -141,9 +151,11 @@ MSVC is required. The vendored OpenCV under `third_party/opencv` is a prebuilt `
 ```
 cmake -B build
 cmake --build build
-ctest --test-dir build     # run the unit tests
-./build/kfc                # graphical play
-./build/kfc --script       # text harness, reads a board + script from stdin
+ctest --test-dir build          # unit_tests + socket_tests
+./build/kfc                     # graphical play (local, over an in-process loopback)
+./build/kfc_server [port]       # run a server (default port 9000)
+./build/kfc --connect host:port # play against a server (default 127.0.0.1:9000)
+./build/kfc --script            # text harness, reads a board + script from stdin
 ```
 
 `kfc` and `render_demo` load sprites from `client/assets` by default, resolved relative to the working directory — run them from the repository root, or pass an assets root as the first argument.
@@ -152,7 +164,9 @@ Targets, and why they are split:
 
 - `kfc_lib` — all of `shared/logic/` + `client/input` + `texttests`. Globbed; no graphics.
 - `kfc_server_lib` — the Server layer (`server/net` + `server/app`). Links `kfc_lib`, never OpenCV (a server has no display). Globbed; the integration tests link it.
-- `kfc_client_net` — the client networking runtime (`client/net`): RemoteGame, the ClientGame seam, and the in-process loopback. Links `kfc_lib` + `kfc_server_lib` (loopback hosts a real session), never OpenCV. Globbed.
+- `kfc_client_net` — the client networking runtime (`client/net`): RemoteGame, the ClientGame seam, the in-process loopback, and the WebSocket client. Links `kfc_lib` + `kfc_server_lib` (loopback hosts a real session), never OpenCV. Globbed.
+- `kfc_websocket` — an INTERFACE target carrying the vendored asio + websocketpp include dirs (as SYSTEM) and their defines (`ASIO_STANDALONE`, `_WEBSOCKETPP_CPP11_STRICT_`, `_WIN32_WINNT`), plus Winsock. Linked PRIVATE only into the two `.cpp` wrappers that speak WebSocket, so the heavy headers never leak past them.
+- `kfc_server` — the server app; no window, no OpenCV. `socket_tests` — the one real-socket test, its own binary.
 - `kfc_view_core` — the pure half of `client/view`: the seam, the Animator, asset paths, the config loader. Links `kfc_lib`, **not** OpenCV, so the unit tests can link it.
 - `kfc_view` — the drawing half: `Renderer`, `ImageView`, and the `Img`/`MouseWindow` wrapper. The only target that links OpenCV. Sources are listed explicitly, not globbed, because which side a file lands on is a design decision.
 - `kfc` — the app; `render_demo` — the PNG visual check; `unit_tests` — the doctest suite.

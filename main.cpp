@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <set>
@@ -13,7 +15,9 @@
 #include "client/input/include/controller.hpp"
 #include "client/input/include/local_game_access.hpp"
 #include "client/net/include/client_game.hpp"
+#include "client/net/include/endpoint.hpp"
 #include "client/net/include/loopback_game.hpp"
+#include "client/net/include/networked_game.hpp"
 #include "shared/logic/game_record/include/move_log.hpp"
 #include "shared/logic/game_record/include/score_board.hpp"
 #include "shared/logic/io/include/board_parser.hpp"
@@ -28,20 +32,15 @@
 
 namespace {
 
-// Standard chess starting position in the BoardParser text format (color letter
-// + kind letter; '.' is an empty cell). This is composition-root configuration,
-// not Business Logic -- the parser turns it into a Board and assigns piece ids.
-const char* const startingBoardText =
-    "Board:\n"
-    "bR bN bB bQ bK bB bN bR\n"
-    "bP bP bP bP bP bP bP bP\n"
-    ". . . . . . . .\n"
-    ". . . . . . . .\n"
-    ". . . . . . . .\n"
-    ". . . . . . . .\n"
-    "wP wP wP wP wP wP wP wP\n"
-    "wR wN wB wQ wK wB wN wR\n"
-    "Commands:\n";
+// Where the opening position is read from -- the same file the server loads, so
+// one description of the board serves both composition roots. Resolved from the
+// working directory, like the assets.
+const char* const startPositionPath = "config/start_position.txt";
+
+// The default server address for --connect when it is given no address, or only
+// a host or only a port.
+const char* const defaultHost = "127.0.0.1";
+constexpr std::uint16_t defaultPort = 9000;
 
 // Largest real-time step fed to the engine in one frame. Clamping keeps a
 // paused/janky frame (or the first frame) from jumping the clock forward.
@@ -169,20 +168,54 @@ int runGraphical(kfc::net::ClientGame& game, int boardWidth, int boardHeight,
 
 int main(int argc, char** argv) {
     try {
-        if (argc > 1 && std::string(argv[1]) == "--script") {
+        const std::vector<std::string> args(argv + 1, argv + argc);
+        if (!args.empty() && args[0] == "--script") {
             return runScript(std::cin, std::cout);
         }
-        const std::string assetsRoot = (argc > 1) ? argv[1] : "client/assets";
 
-        // Build the starting board, then run it over the server protocol in this
-        // one process: a LoopbackGame hosts the authoritative session and a
-        // client, so local play and networked play travel the same path.
-        std::istringstream boardText{startingBoardText};
-        kfc::io::ParsedInput parsed = kfc::io::parseInput(boardText);
+        // Parse an optional "--connect [host:port]" and an optional assets root.
+        // Without --connect the game runs against a same-process loopback server;
+        // with it, against a real one over a socket.
+        std::optional<std::string> connectArg;
+        std::string assetsRoot = "client/assets";
+        for (std::size_t i = 0; i < args.size(); ++i) {
+            if (args[i] == "--connect") {
+                connectArg = "";  // default address unless an argument follows
+                if (i + 1 < args.size() && args[i + 1].rfind("--", 0) != 0) {
+                    connectArg = args[++i];
+                }
+            } else {
+                assetsRoot = args[i];
+            }
+        }
+
+        // Both play modes open from the same board file.
+        std::ifstream boardFile{startPositionPath};
+        if (!boardFile) {
+            std::cout << "ERROR cannot open " << startPositionPath << "\n";
+            return 1;
+        }
+        kfc::io::ParsedInput parsed = kfc::io::parseInput(boardFile);
         const int boardWidth = parsed.board.width();
         const int boardHeight = parsed.board.height();
-        kfc::net::LoopbackGame game{parsed.board};
 
+        if (connectArg) {
+            const std::optional<kfc::net::Endpoint> endpoint =
+                kfc::net::parseEndpoint(*connectArg, defaultHost, defaultPort);
+            if (!endpoint) {
+                std::cout << "ERROR bad address " << *connectArg << "\n";
+                return 1;
+            }
+            kfc::net::NetworkedGame game{endpoint->host, endpoint->port,
+                                         parsed.board};
+            return runGraphical(game, boardWidth, boardHeight, assetsRoot,
+                                kfc::view::defaultCellPx);
+        }
+
+        // A LoopbackGame hosts the authoritative session and a client in this one
+        // process, so local play travels the very same protocol path as a
+        // networked game.
+        kfc::net::LoopbackGame game{parsed.board};
         return runGraphical(game, boardWidth, boardHeight, assetsRoot,
                             kfc::view::defaultCellPx);
     } catch (const kfc::io::ParseError& e) {

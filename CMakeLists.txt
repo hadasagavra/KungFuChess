@@ -51,6 +51,26 @@ if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ---------------------------------------------------------------------------
+# kfc_websocket: the vendored, header-only WebSocket stack -- standalone asio
+# (third_party/asio) under websocketpp (third_party/websocketpp). An INTERFACE
+# library: it carries the include dirs and the defines, added as SYSTEM includes
+# so their warnings stay out of our /W4. Only the .cpp wrappers that actually
+# speak WebSocket link it (PRIVATE), so the heavy headers never leak into a
+# module's own headers or into the tests. On Windows asio needs Winsock.
+# ---------------------------------------------------------------------------
+add_library(kfc_websocket INTERFACE)
+target_include_directories(kfc_websocket SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/asio/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/websocketpp")
+target_compile_definitions(kfc_websocket INTERFACE
+    ASIO_STANDALONE
+    _WEBSOCKETPP_CPP11_STRICT_
+    _WIN32_WINNT=0x0601)
+if(WIN32)
+    target_link_libraries(kfc_websocket INTERFACE ws2_32)
+endif()
+
+# ---------------------------------------------------------------------------
 # kfc_server_lib: the Server layer -- the networking/coordination code. It links
 # kfc_lib (it drives a GameEngine and speaks the io wire protocol) and NEVER
 # OpenCV: a server has no display. Kept a separate target so the tests can link
@@ -64,9 +84,16 @@ file(GLOB_RECURSE KFC_SERVER_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/server/net/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/server/app/src/*.cpp"
 )
+# server_main.cpp is the server executable's composition root, not library code:
+# keep its main() out of the lib the tests link (mirrors main.cpp vs kfc_lib).
+list(REMOVE_ITEM KFC_SERVER_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/server/app/src/server_main.cpp")
 
 add_library(kfc_server_lib STATIC ${KFC_SERVER_SOURCES})
-target_link_libraries(kfc_server_lib PUBLIC kfc_lib)
+# kfc_websocket is PRIVATE: only websocket_server.cpp includes the WebSocket
+# headers, so they compile into this lib but are invisible to anything that
+# links it (its own headers stay clean via pimpl).
+target_link_libraries(kfc_server_lib PUBLIC kfc_lib PRIVATE kfc_websocket)
 
 # ---------------------------------------------------------------------------
 # kfc_client_net: the client's networking runtime -- RemoteGame (a client's view
@@ -80,7 +107,9 @@ file(GLOB_RECURSE KFC_CLIENT_NET_SOURCES CONFIGURE_DEPENDS
 )
 
 add_library(kfc_client_net STATIC ${KFC_CLIENT_NET_SOURCES})
-target_link_libraries(kfc_client_net PUBLIC kfc_lib kfc_server_lib)
+# Same as the server lib: only websocket_client.cpp sees the WebSocket headers.
+target_link_libraries(kfc_client_net PUBLIC kfc_lib kfc_server_lib
+                      PRIVATE kfc_websocket)
 
 # ---------------------------------------------------------------------------
 # OpenCV: a vendored, prebuilt MSVC /MD build under third_party/opencv. It ships
@@ -157,6 +186,15 @@ add_custom_command(TARGET kfc POST_BUILD
     VERBATIM)
 
 # ---------------------------------------------------------------------------
+# kfc_server: the server application (composition root). No window, no sprites,
+# no OpenCV -- the real test that the Server layer needs none of the GUI. It
+# links the server lib (and, transitively, Winsock); the WebSocket headers are
+# reached only inside kfc_server_lib.
+# ---------------------------------------------------------------------------
+add_executable(kfc_server "${CMAKE_CURRENT_SOURCE_DIR}/server/app/src/server_main.cpp")
+target_link_libraries(kfc_server PRIVATE kfc_server_lib)
+
+# ---------------------------------------------------------------------------
 # render_demo: a small driver that builds a starting-position GameSnapshot and
 # renders it to a PNG. Visual check for the view layer; not part of the app.
 # ---------------------------------------------------------------------------
@@ -197,5 +235,26 @@ target_include_directories(unit_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third
 # ---------------------------------------------------------------------------
 # CTest: `ctest --test-dir build` runs the whole suite.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# socket_tests: the one test that opens a real WebSocket (server + client in this
+# process over localhost). It lives in its own binary and its own CTest entry so
+# its timing and its need to bind a port never destabilise the deterministic
+# unit suite -- run or skip it on its own. Reuses doctest's entry point.
+# ---------------------------------------------------------------------------
+file(GLOB SOCKET_TEST_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/socket/*.cpp")
+
+add_executable(socket_tests
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_main.cpp"
+    ${SOCKET_TEST_SOURCES}
+)
+target_link_libraries(socket_tests PRIVATE kfc_server_lib kfc_client_net)
+target_include_directories(socket_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+
+# ---------------------------------------------------------------------------
+# CTest: `ctest --test-dir build` runs the whole suite.
+# ---------------------------------------------------------------------------
 enable_testing()
 add_test(NAME unit_tests COMMAND unit_tests)
+add_test(NAME socket_tests COMMAND socket_tests)
+set_tests_properties(socket_tests PROPERTIES LABELS socket TIMEOUT 60)
