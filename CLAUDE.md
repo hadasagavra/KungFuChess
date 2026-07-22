@@ -73,10 +73,17 @@ shared/                 # everything a client and a server both need
       state_codec       # GameSnapshot <-> a whole-frame wire text
       wire_message      # the typed message variant + the one encode/decode seam
       text              # shared text tokens (+ flag helpers)
-client/                 # the GUI — display and input only, no game rules
+client/                 # client-only code: the GUI plus the client's networking
   input/                # GUI (input side)
     board_mapper        # pixel <-> cell mapping (display-coupled)
-    controller          # turns raw input into engine commands; owns the selection
+    game_access         # what the Controller drives: pieceAt + request move/jump
+    local_game_access   # GameAccess over a same-process engine (script harness/tests)
+    controller          # turns raw input into commands via GameAccess; owns selection
+  net/                  # the client's networking runtime (kfc::net)
+    client_game         # the seam the frame loop drives (GameAccess + advance/snapshot)
+    remote_game         # a client's replica-backed view; sends commands, applies state
+    loopback_transport  # a MessageTransport that hands server output to one client
+    loopback_game       # hosts a GameSession + RemoteGame in-process (two seats)
   view/                 # GUI (output side)
     scene_translator    # the GUI<-Logic seam: engine snapshot -> GameSnapshot
     game_snapshot       # the flat, drawable description of one frame
@@ -113,11 +120,11 @@ tests/
     test_command_notation  test_event_codec  test_state_codec
     test_scene_translator  test_animator  test_render_layout
     test_script_parser
-  integration/        # Server level: a GameSession driven over a fake transport
-    test_game_session
+  integration/        # Server + client-runtime level, over a fake/loopback transport
+    test_game_session  test_loopback_game
 ```
 
-**Layer mapping:** everything under `shared/logic/` — `model` + `rules` + `realtime` + `engine` + `game_record` — is Business Logic; `client/input` + `client/view` are the GUI. `shared/logic/io` is a serialization boundary, not a rules or display layer. `shared/bus` is neutral infrastructure: it names no game concept, so every layer — including a future server — may depend on it, and it depends on none.
+**Layer mapping:** everything under `shared/logic/` — `model` + `rules` + `realtime` + `engine` + `game_record` — is Business Logic; `client/input` + `client/view` are the GUI. `client/net` is the client's networking runtime — the client counterpart to `server/`: it holds no game rules (it keeps a replica the server fills and reuses `RuleEngine` only to hint legal-move highlights), and it is what lets the GUI drive either a local or a remote authority. `shared/logic/io` is a serialization boundary, not a rules or display layer. `shared/bus` is neutral infrastructure: it names no game concept, so every layer — including a future server — may depend on it, and it depends on none.
 
 Note that the two groupings answer different questions and must both hold: `shared` vs `client` vs `server` says *who ships this code*, the layer says *what it is allowed to know*. `shared/` is not a synonym for Business Logic — `bus` is shared and is not Business Logic — and a module being client-only never licenses it to hold a game rule.
 
@@ -145,6 +152,7 @@ Targets, and why they are split:
 
 - `kfc_lib` — all of `shared/logic/` + `client/input` + `texttests`. Globbed; no graphics.
 - `kfc_server_lib` — the Server layer (`server/net` + `server/app`). Links `kfc_lib`, never OpenCV (a server has no display). Globbed; the integration tests link it.
+- `kfc_client_net` — the client networking runtime (`client/net`): RemoteGame, the ClientGame seam, and the in-process loopback. Links `kfc_lib` + `kfc_server_lib` (loopback hosts a real session), never OpenCV. Globbed.
 - `kfc_view_core` — the pure half of `client/view`: the seam, the Animator, asset paths, the config loader. Links `kfc_lib`, **not** OpenCV, so the unit tests can link it.
 - `kfc_view` — the drawing half: `Renderer`, `ImageView`, and the `Img`/`MouseWindow` wrapper. The only target that links OpenCV. Sources are listed explicitly, not globbed, because which side a file lands on is a design decision.
 - `kfc` — the app; `render_demo` — the PNG visual check; `unit_tests` — the doctest suite.
@@ -159,7 +167,7 @@ The one-way dependency (`kfc_view` → `kfc_view_core`) makes "graphics only via
 - **Functions & variables:** camelCase; private members carry a trailing underscore (`board_`).
 - **Constants:** camelCase, with no prefix — e.g. `squareTravelMs`, `msPerCell`, `defaultCellPx`. Do NOT use a `k` prefix (`kSquareTravelMs` is wrong).
 - **Getters:** get-prefixed camelCase (`getKind()`, `getState()`); conversions are `toString()`. Board dimensions are `width()` / `height()`.
-- **Namespaces:** `kfc` at the root, one nested namespace per module (`kfc::model`, `kfc::rules`, `kfc::realtime`, `kfc::engine`, `kfc::game_record`, `kfc::input`, `kfc::view`, `kfc::io`, `kfc::bus`, `kfc::server`, `kfc::texttests`). `kfc::server` covers both server sub-modules (`net` + `app`); they are one architectural layer, so they share the namespace. Business Logic namespaces must never `#include` from `input`/`view`/`server`.
+- **Namespaces:** `kfc` at the root, one nested namespace per module (`kfc::model`, `kfc::rules`, `kfc::realtime`, `kfc::engine`, `kfc::game_record`, `kfc::input`, `kfc::view`, `kfc::net`, `kfc::io`, `kfc::bus`, `kfc::server`, `kfc::texttests`). `kfc::server` covers both server sub-modules (`net` + `app`); `kfc::net` is the client's networking. Business Logic namespaces must never `#include` from `input`/`view`/`net`/`server`.
 - **Includes** are repo-root relative and spell out the full path from the deployment-target root down through `include/`: `#include "shared/logic/model/include/piece.hpp"`, `#include "client/view/include/renderer.hpp"`. Never a relative `../` path.
 
 **Module internal structure:** every architectural module is strictly divided into `include/` (all `.hpp`) and `src/` (all `.cpp`). Do not place `.hpp` or `.cpp` files directly in the root of a module folder.

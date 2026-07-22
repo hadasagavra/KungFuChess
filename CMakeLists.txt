@@ -69,6 +69,20 @@ add_library(kfc_server_lib STATIC ${KFC_SERVER_SOURCES})
 target_link_libraries(kfc_server_lib PUBLIC kfc_lib)
 
 # ---------------------------------------------------------------------------
+# kfc_client_net: the client's networking runtime -- RemoteGame (a client's view
+# of the game), the ClientGame seam the frame loop drives, and the loopback that
+# hosts a GameSession in-process for local play. It links kfc_server_lib because
+# loopback IS the server running inside the client; no graphics, so the tests can
+# link it. Globbed.
+# ---------------------------------------------------------------------------
+file(GLOB_RECURSE KFC_CLIENT_NET_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/net/src/*.cpp"
+)
+
+add_library(kfc_client_net STATIC ${KFC_CLIENT_NET_SOURCES})
+target_link_libraries(kfc_client_net PUBLIC kfc_lib kfc_server_lib)
+
+# ---------------------------------------------------------------------------
 # OpenCV: a vendored, prebuilt MSVC /MD build under third_party/opencv. It ships
 # no OpenCVConfig.cmake, so find_package won't work -- we wire include/lib/dll by
 # hand. ONLY the view layer links OpenCV; the Business Logic never sees it.
@@ -133,7 +147,7 @@ target_include_directories(kfc_view SYSTEM PUBLIC "${OPENCV_INCLUDE_DIR}")
 # kfc: the application (composition root).
 # ---------------------------------------------------------------------------
 add_executable(kfc "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
-target_link_libraries(kfc PRIVATE kfc_lib kfc_view)
+target_link_libraries(kfc PRIVATE kfc_lib kfc_view kfc_client_net)
 
 # The prebuilt OpenCV is a DLL: drop it next to kfc.exe so the app runs from the
 # build tree without needing OpenCV on PATH.
@@ -169,9 +183,11 @@ add_executable(unit_tests
     ${TEST_SOURCES}
 )
 # kfc_view_core carries the pure view modules (the seam, the Animator, the asset
-# paths, the config loader). kfc_server_lib carries the GameSession the
-# integration tests drive. Neither drags OpenCV into the test binary.
-target_link_libraries(unit_tests PRIVATE kfc_lib kfc_view_core kfc_server_lib)
+# paths, the config loader). kfc_server_lib carries the GameSession and
+# kfc_client_net the RemoteGame/loopback the integration tests drive. None drags
+# OpenCV into the test binary.
+target_link_libraries(unit_tests PRIVATE kfc_lib kfc_view_core kfc_server_lib
+                      kfc_client_net)
 
 # doctest is vendored under third_party/. The tests include it two ways:
 #   "third_party/doctest/doctest.h"  (resolved via the repo root, already set)

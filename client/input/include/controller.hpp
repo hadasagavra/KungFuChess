@@ -2,19 +2,20 @@
 
 #include <optional>
 
-#include "shared/logic/engine/include/game_engine.hpp"
 #include "client/input/include/board_mapper.hpp"
+#include "client/input/include/game_access.hpp"
 #include "shared/logic/model/include/position.hpp"
 
 namespace kfc::input {
 
 // Translates raw user clicks into game commands. It decides nothing about chess
 // legality: it maps pixels to cells via BoardMapper, tracks the selected cell,
-// and forwards completed source->destination moves to the GameEngine. It never
-// calls Board::movePiece or RuleEngine directly.
+// and forwards completed source->destination moves through a GameAccess. It
+// speaks to that interface, not to a concrete engine, so the same Controller
+// drives a local engine or a remote server without change.
 class Controller {
 public:
-    Controller(engine::GameEngine& engine, BoardMapper mapper);
+    Controller(GameAccess& game, BoardMapper mapper);
 
     void handleClick(int x, int y);
     void handleJump(int x, int y);
@@ -25,7 +26,7 @@ private:
     void handleSecondClick(std::optional<model::Position> cell);
 
 
-    engine::GameEngine& engine_;
+    GameAccess& game_;
     BoardMapper mapper_;
     std::optional<model::Position> selected_;
 };

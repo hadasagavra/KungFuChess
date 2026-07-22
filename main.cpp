@@ -11,6 +11,9 @@
 #include "shared/logic/engine/include/game_engine.hpp"
 #include "client/input/include/board_mapper.hpp"
 #include "client/input/include/controller.hpp"
+#include "client/input/include/local_game_access.hpp"
+#include "client/net/include/client_game.hpp"
+#include "client/net/include/loopback_game.hpp"
 #include "shared/logic/game_record/include/move_log.hpp"
 #include "shared/logic/game_record/include/score_board.hpp"
 #include "shared/logic/io/include/board_parser.hpp"
@@ -58,17 +61,19 @@ int elapsedMsSince(std::chrono::steady_clock::time_point last,
 }
 
 // Text harness: read a board + a script from `in`, replay the commands through
-// the public command path, and print board dumps to `out`. Unchanged behavior
-// from the original entry point -- kept behind the --script flag.
+// the public command path, and print board dumps to `out`. It drives a local
+// engine directly through a LocalGameAccess -- it is a test tool, not networked
+// play, so it does not go over the server protocol.
 int runScript(std::istream& in, std::ostream& out) {
     kfc::io::ParsedInput parsed = kfc::io::parseInput(in);
 
     kfc::engine::GameEngine engine{parsed.board};
+    kfc::input::LocalGameAccess access{engine};
     // The text harness draws nothing, so the board sits at the frame origin with
     // no panels beside it.
     kfc::input::BoardMapper mapper{parsed.board.width(), parsed.board.height(),
                                    kfc::view::defaultCellPx, 0, 0};
-    kfc::input::Controller controller{engine, mapper};
+    kfc::input::Controller controller{access, mapper};
     kfc::texttests::ScriptRunner runner{controller, engine, out};
 
     for (const std::string& line : parsed.commands) {
@@ -80,29 +85,23 @@ int runScript(std::istream& in, std::ostream& out) {
     return 0;
 }
 
-// Graphical play: a persistent window renders the engine's live state every
-// frame, real time advances by wall-clock, and each click is forwarded to the
-// Controller (source -> destination moves). The window speaks pixels; the
-// Controller owns the pixel->cell mapping, so no board logic lives here.
-int runGraphical(const std::string& assetsRoot, int cellPx) {
-    std::istringstream boardText{startingBoardText};
-    kfc::io::ParsedInput parsed = kfc::io::parseInput(boardText);
-
-    kfc::engine::GameEngine engine{parsed.board};
-
-    // The moves log and the score are Business Logic that listens: the engine
+// Graphical play: a persistent window renders the game's live state every frame,
+// real time advances by wall-clock, and each click is forwarded to the
+// Controller (source -> destination moves). The loop speaks only to a ClientGame
+// -- it neither knows nor cares whether the authority sits in this process
+// (loopback) or across a socket. The window speaks pixels; the Controller owns
+// the pixel->cell mapping, so no board logic lives here.
+int runGraphical(kfc::net::ClientGame& game, int boardWidth, int boardHeight,
+                 const std::string& assetsRoot, int cellPx) {
+    // The moves log and the score are Business Logic that listens: the game
     // publishes what happened and never learns who is recording it. Subscribing
-    // here is the whole cost of a new feature of this kind -- a sound player or
-    // an end-of-game animation would join the same bus without the engine, the
-    // log, or the score changing at all.
+    // here is the whole cost of a feature of this kind -- and it is identical
+    // whether the event was born in a local engine or arrived over the wire.
     kfc::game_record::MoveLog moveLog;
     kfc::game_record::ScoreBoard scoreBoard;
-    engine.events().subscribe<kfc::model::MoveEvent>(
-        [&moveLog](const kfc::model::MoveEvent& event) {
-            moveLog.record(event);
-            
-        });
-    engine.events().subscribe<kfc::model::CapturedPiece>(
+    game.events().subscribe<kfc::model::MoveEvent>(
+        [&moveLog](const kfc::model::MoveEvent& event) { moveLog.record(event); });
+    game.events().subscribe<kfc::model::CapturedPiece>(
         [&scoreBoard](const kfc::model::CapturedPiece& captured) {
             scoreBoard.record(captured);
         });
@@ -111,13 +110,12 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
         kfc::view::defaultRenderConfig(assetsRoot, cellPx);
     // One layout answer, shared: the renderer draws the board at this origin and
     // the mapper reads clicks against it, so the two cannot disagree.
-    const kfc::view::FrameLayout layout = kfc::view::computeLayout(
-        config, parsed.board.width(), parsed.board.height());
+    const kfc::view::FrameLayout layout =
+        kfc::view::computeLayout(config, boardWidth, boardHeight);
 
-    kfc::input::BoardMapper mapper{parsed.board.width(), parsed.board.height(),
-                                   cellPx, layout.boardOrigin.x,
-                                   layout.boardOrigin.y};
-    kfc::input::Controller controller{engine, mapper};
+    kfc::input::BoardMapper mapper{boardWidth, boardHeight, cellPx,
+                                   layout.boardOrigin.x, layout.boardOrigin.y};
+    kfc::input::Controller controller{game, mapper};
 
     kfc::view::ImageView view{config};
     view.open();
@@ -126,19 +124,18 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
     while (view.isOpen()) {
         const auto now = std::chrono::steady_clock::now();
         const int deltaMs = elapsedMsSince(last, now);
-        engine.wait(deltaMs);
+        game.advance(deltaMs);
         last = now;
 
         // Highlight the selected piece's legal destinations, if any. The
-        // Controller owns the selection; the engine (Business Logic) answers
-        // where that piece may move. The composition root only plumbs the two
-        // together -- no game rules live here.
+        // Controller owns the selection; the game answers where that piece may
+        // move. The composition root only plumbs the two together.
         std::set<kfc::model::Position> highlights;
         if (const std::optional<kfc::model::Position>& selected =
                 controller.selection()) {
-            highlights = engine.legalDestinationsFor(*selected);
+            highlights = game.legalDestinationsFor(*selected);
         }
-        const kfc::engine::GameSnapshot state = engine.getSnapshot();
+        const kfc::engine::GameSnapshot state = game.getSnapshot();
         const kfc::view::SceneInput scene{
             state,      moveLog,          scoreBoard,
             highlights, whitePlayerName,  blackPlayerName};
@@ -163,7 +160,6 @@ int runGraphical(const std::string& assetsRoot, int cellPx) {
             if (!opensDoubleClick) {
                 controller.handleClick(action.position.x, action.position.y);
             }
-
         }
     }
     return 0;
@@ -177,7 +173,18 @@ int main(int argc, char** argv) {
             return runScript(std::cin, std::cout);
         }
         const std::string assetsRoot = (argc > 1) ? argv[1] : "client/assets";
-        return runGraphical(assetsRoot, kfc::view::defaultCellPx);
+
+        // Build the starting board, then run it over the server protocol in this
+        // one process: a LoopbackGame hosts the authoritative session and a
+        // client, so local play and networked play travel the same path.
+        std::istringstream boardText{startingBoardText};
+        kfc::io::ParsedInput parsed = kfc::io::parseInput(boardText);
+        const int boardWidth = parsed.board.width();
+        const int boardHeight = parsed.board.height();
+        kfc::net::LoopbackGame game{parsed.board};
+
+        return runGraphical(game, boardWidth, boardHeight, assetsRoot,
+                            kfc::view::defaultCellPx);
     } catch (const kfc::io::ParseError& e) {
         std::cout << "ERROR " << e.code << "\n";
         return 1;

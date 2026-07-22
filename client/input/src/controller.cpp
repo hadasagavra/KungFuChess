@@ -2,8 +2,8 @@
 
 namespace kfc::input {
 
-Controller::Controller(engine::GameEngine& engine, BoardMapper mapper)
-    : engine_(engine), mapper_(mapper) {}
+Controller::Controller(GameAccess& game, BoardMapper mapper)
+    : game_(game), mapper_(mapper) {}
 
 void Controller::handleClick(int x, int y) {
     std::optional<model::Position> cell = mapper_.toCell(x, y);
@@ -19,8 +19,8 @@ const std::optional<model::Position>& Controller::selection() const {
 }
 
 void Controller::handleFirstClick(std::optional<model::Position> cell) {
-    if (!cell) return;                                  // off-board, no selection: ignore
-    if (!engine_.getSnapshot().pieceAt(*cell)) return;  // empty cell: ignore
+    if (!cell) return;                       // off-board, no selection: ignore
+    if (!game_.pieceAt(*cell)) return;       // empty cell: ignore
     selected_ = cell;
 }
 
@@ -30,19 +30,18 @@ void Controller::handleSecondClick(std::optional<model::Position> cell) {
         return;
     }
     // Clicking one of your own pieces re-selects it rather than moving onto it.
-    const std::optional<model::Piece> selectedPiece =
-        engine_.getSnapshot().pieceAt(*selected_);
-    const std::optional<model::Piece> target = engine_.getSnapshot().pieceAt(*cell);
+    const std::optional<model::Piece> selectedPiece = game_.pieceAt(*selected_);
+    const std::optional<model::Piece> target = game_.pieceAt(*cell);
     if (target && selectedPiece && target->getColor() == selectedPiece->getColor()) {
         selected_ = cell;
         return;
     }
-    engine_.requestMove(*selected_, *cell);
+    game_.requestMove(*selected_, *cell);
     selected_.reset();     // clear after every in-board second click, legal or not
 }
 
 void Controller::handleJump(int x, int y) {
     std::optional<model::Position> cell = mapper_.toCell(x, y);
-    if (cell) engine_.requestJump(*cell);
+    if (cell) game_.requestJump(*cell);
 }
 }  // namespace kfc::input

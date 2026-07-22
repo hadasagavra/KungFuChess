@@ -6,6 +6,7 @@
 #include "shared/logic/engine/include/game_engine.hpp"
 #include "client/input/include/board_mapper.hpp"
 #include "client/input/include/controller.hpp"
+#include "client/input/include/local_game_access.hpp"
 #include "shared/logic/model/include/board.hpp"
 #include "shared/logic/model/include/piece.hpp"
 #include "shared/logic/model/include/position.hpp"
@@ -13,6 +14,7 @@
 using kfc::engine::GameEngine;
 using kfc::input::BoardMapper;
 using kfc::input::Controller;
+using kfc::input::LocalGameAccess;
 using kfc::model::Board;
 using kfc::model::Color;
 using kfc::model::Kind;
@@ -41,7 +43,8 @@ TEST_CASE("A first click maps pixels to the right cell and selects a piece") {
     Board board{8, 8};
     place(board, 1, Color::White, Kind::Rook, Position{2, 3});  // row 2, col 3
     GameEngine engine{board};
-    Controller controller{engine, BoardMapper{8, 8, cellSize, 0, 0}};
+    LocalGameAccess access{engine};
+    Controller controller{access, BoardMapper{8, 8, cellSize, 0, 0}};
 
     controller.handleClick(centre(3), centre(2));  // x from col, y from row
 
@@ -52,7 +55,8 @@ TEST_CASE("A first click maps pixels to the right cell and selects a piece") {
 TEST_CASE("A first click on an empty cell is ignored") {
     Board board{8, 8};
     GameEngine engine{board};
-    Controller controller{engine, BoardMapper{8, 8, cellSize, 0, 0}};
+    LocalGameAccess access{engine};
+    Controller controller{access, BoardMapper{8, 8, cellSize, 0, 0}};
 
     controller.handleClick(centre(1), centre(1));  // empty {1,1}
 
@@ -62,7 +66,8 @@ TEST_CASE("A first click on an empty cell is ignored") {
 TEST_CASE("A first click off the board is ignored when nothing is selected") {
     Board board{8, 8};
     GameEngine engine{board};
-    Controller controller{engine, BoardMapper{8, 8, cellSize, 0, 0}};
+    LocalGameAccess access{engine};
+    Controller controller{access, BoardMapper{8, 8, cellSize, 0, 0}};
 
     controller.handleClick(10000, 10000);  // far off board
     CHECK_FALSE(controller.selection().has_value());
@@ -75,7 +80,8 @@ TEST_CASE("A second click inside the board sends the move and clears selection")
     Board board{8, 8};
     place(board, 1, Color::White, Kind::Rook, Position{0, 0});
     GameEngine engine{board};
-    Controller controller{engine, BoardMapper{8, 8, cellSize, 0, 0}};
+    LocalGameAccess access{engine};
+    Controller controller{access, BoardMapper{8, 8, cellSize, 0, 0}};
 
     controller.handleClick(centre(0), centre(0));  // select {0,0}
     REQUIRE(controller.selection().has_value());
@@ -94,7 +100,8 @@ TEST_CASE("A second click off the board cancels the selection and sends nothing"
     Board board{8, 8};
     place(board, 1, Color::White, Kind::Rook, Position{0, 0});
     GameEngine engine{board};
-    Controller controller{engine, BoardMapper{8, 8, cellSize, 0, 0}};
+    LocalGameAccess access{engine};
+    Controller controller{access, BoardMapper{8, 8, cellSize, 0, 0}};
 
     controller.handleClick(centre(0), centre(0));  // select {0,0}
     REQUIRE(controller.selection().has_value());
@@ -112,7 +119,8 @@ TEST_CASE("Selection clears after a second click even when the move is illegal")
     Board board{8, 8};
     place(board, 1, Color::White, Kind::Rook, Position{0, 0});
     GameEngine engine{board};
-    Controller controller{engine, BoardMapper{8, 8, cellSize, 0, 0}};
+    LocalGameAccess access{engine};
+    Controller controller{access, BoardMapper{8, 8, cellSize, 0, 0}};
 
     controller.handleClick(centre(0), centre(0));  // select {0,0}
     controller.handleClick(centre(1), centre(1));  // {1,1}: illegal diagonal for a rook
