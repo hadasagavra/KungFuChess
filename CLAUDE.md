@@ -19,7 +19,7 @@ KungFuChess is a real-time, simultaneous chess variant — there are no turns. B
 - After any move, a piece must rest (cooldown) before it can move again.
 - Winning = capturing the king. There is no concept of check or checkmate.
 - Extra piece commands: Jump (move + short pause).
-- Extra piece types beyond standard chess, e.g. Quadcopter: slower cooldown than other pieces, but can move to any square in the [±2, ±2] range.
+- Extra piece types beyond standard chess, e.g. Quadcopter: slower cooldown than other pieces, but can move to any square in the [±2, ±2] range. **Not implemented yet** — `model::Kind` holds the six standard kinds only, and there are no Quadcopter sprites. When it is added, its letter in `io::piece_codec` cannot be `'Q'`; the queen already has it.
 - Product features layered on top: moves log, score (sum of the "cost" of captured pieces), and player name display.
 
 ## Architecture — the central constraint
@@ -77,7 +77,8 @@ client/                 # the GUI — display and input only, no game rules
     scene_translator    # the GUI<-Logic seam: engine snapshot -> GameSnapshot
     game_snapshot       # the flat, drawable description of one frame
     animator            # sprite animation state machine (display-only)
-    animation_config    # + animation_config_store: graphics half of config.json
+    animation_config    # + animation_config_store: the "graphics" half of each
+                        # assets/pieces2/<piece>/states/<state>/config.json
     asset_paths         # where a sprite for a piece/state lives
     render_config       # colors, cell size, panel sizes
     render_layout       # one layout answer shared by renderer and mapper

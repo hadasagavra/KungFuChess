@@ -1,5 +1,7 @@
 #include "shared/logic/io/include/move_notation.hpp"
 
+#include <cctype>
+
 #include "shared/logic/io/include/piece_codec.hpp"
 
 namespace kfc::io {
@@ -42,6 +44,25 @@ std::string squareName(model::Position cell, int boardHeight) {
     // Row 0 is the top of the board, which is the highest rank.
     const int rank = boardHeight - cell.row;
     return std::string(1, fileLetter(cell)) + std::to_string(rank);
+}
+
+std::optional<model::Position> squareFromName(const std::string& name,
+                                              int boardHeight) {
+    // A name is one file letter followed by the digits of its rank, so anything
+    // shorter than two characters cannot be one.
+    if (name.size() < 2) return std::nullopt;
+
+    const int col = name[0] - firstFileLetter;
+    if (col < 0) return std::nullopt;
+
+    const std::string rankDigits = name.substr(1);
+    for (const char digit : rankDigits) {
+        if (!std::isdigit(static_cast<unsigned char>(digit))) return std::nullopt;
+    }
+    const int rank = std::stoi(rankDigits);
+    if (rank < 1 || rank > boardHeight) return std::nullopt;
+
+    return model::Position{boardHeight - rank, col};
 }
 
 std::string moveNotation(const model::MoveEvent& move, int boardHeight) {

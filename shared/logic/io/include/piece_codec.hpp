@@ -29,4 +29,10 @@ bool isEmptyToken(const std::string& token);
 std::optional<PieceCode> pieceFromToken(const std::string& token);
 std::string encodeCell(const std::optional<model::Piece>& cell);
 
+// The two-character token for a piece identity, e.g. "wK" -- the inverse of
+// pieceFromToken. Exposed because a piece identity is written in more places
+// than a board cell: the wire protocol names the mover of a command and the
+// victim of a capture the same way, and must not assemble the token itself.
+std::string encodePieceToken(model::Color color, model::Kind kind);
+
 }  // namespace kfc::io

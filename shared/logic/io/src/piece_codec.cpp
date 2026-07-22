@@ -58,12 +58,16 @@ std::optional<PieceCode> pieceFromToken(const std::string& token) {
     return PieceCode{*color, *kind};
 }
 
+std::string encodePieceToken(model::Color color, model::Kind kind) {
+    std::string token;
+    token += charOf(color);
+    token += kindLetter(kind);
+    return token;
+}
+
 std::string encodeCell(const std::optional<model::Piece>& cell) {
     if (!cell) return std::string(1, emptyToken);
-    std::string token;
-    token += charOf(cell->getColor());
-    token += kindLetter(cell->getKind());
-    return token;
+    return encodePieceToken(cell->getColor(), cell->getKind());
 }
 
 }  // namespace kfc::io
