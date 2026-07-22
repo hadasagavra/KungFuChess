@@ -21,14 +21,6 @@ constexpr std::size_t moveFieldCount = 6;
 // A captured piece is just its identity: "wP".
 constexpr std::size_t capturedFieldCount = 1;
 
-std::string encodeFlag(bool flag) { return flag ? "1" : "0"; }
-
-std::optional<bool> decodeFlag(const std::string& token) {
-    if (token == "1") return true;
-    if (token == "0") return false;
-    return std::nullopt;
-}
-
 }  // namespace
 
 std::string encodeMoveEvent(const model::MoveEvent& event, int boardHeight) {

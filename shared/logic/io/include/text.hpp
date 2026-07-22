@@ -1,11 +1,23 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
 
 namespace kfc::io {
+
+// A boolean on the wire is "1" or "0". The one place that maps between the two,
+// so the codecs that carry flags (event_codec, state_codec) do not each spell
+// out the same convention.
+inline std::string encodeFlag(bool flag) { return flag ? "1" : "0"; }
+
+inline std::optional<bool> decodeFlag(const std::string& token) {
+    if (token == "1") return true;
+    if (token == "0") return false;
+    return std::nullopt;
+}
 
 // Remove leading and trailing whitespace.
 inline std::string trim(const std::string& text) {

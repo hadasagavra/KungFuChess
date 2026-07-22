@@ -24,4 +24,13 @@ struct ParsedInput {
 // Parse a "Board:" grid followed by a "Commands:" list from the stream.
 ParsedInput parseInput(std::istream& in);
 
+// Build a Board from its already-split grid rows (each row a whitespace-split
+// line of cell tokens). This is the one place that turns text cells into a
+// Board with piece ids, shared by parseInput and by state_codec so a board read
+// off the wire is reconstructed exactly as one read from a file.
+//
+// Throws ParseError (empty_board, ROW_WIDTH_MISMATCH, UNKNOWN_TOKEN) on bad
+// input, the same vocabulary parseInput reports.
+model::Board buildBoard(const std::vector<std::string>& rows);
+
 }  // namespace kfc::io

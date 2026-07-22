@@ -47,6 +47,8 @@ std::vector<std::string> readCommandLines(std::istream& in) {
     return commands;
 }
 
+}  // namespace
+
 model::Board buildBoard(const std::vector<std::string>& rows) {
     if (rows.empty()) {
         throw ParseError{emptyBoard};
@@ -87,8 +89,6 @@ model::Board buildBoard(const std::vector<std::string>& rows) {
     }
     return board;
 }
-
-}  // namespace
 
 ParsedInput parseInput(std::istream& in) {
     skipToBoardSection(in);
