@@ -7,7 +7,6 @@
 #include "client/net/include/loopback_transport.hpp"
 #include "client/net/include/remote_game.hpp"
 #include "server/app/include/game_session.hpp"
-#include "server/store/include/in_memory_user_store.hpp"
 #include "shared/bus/include/event_bus.hpp"
 #include "shared/logic/engine/include/game_engine.hpp"
 #include "shared/logic/model/include/board.hpp"
@@ -47,6 +46,18 @@ public:
     std::optional<int> blackRating() const override { return std::nullopt; }
     std::optional<std::string> authError() const override { return std::nullopt; }
 
+    // Local play has no lobby: it opens straight into the game and never seeks,
+    // rooms, or waits on an opponent's connection.
+    void seekGame() override {}
+    void cancelSeek() override {}
+    void createRoom() override {}
+    void joinRoom(const std::string&) override {}
+    bool isSearching() const override { return false; }
+    bool isInGame() const override { return true; }
+    std::string roomId() const override { return ""; }
+    std::string statusMessage() const override { return ""; }
+    std::optional<int> opponentCountdown() const override { return std::nullopt; }
+
     std::optional<model::Piece> pieceAt(model::Position cell) const override {
         return remote_.pieceAt(cell);
     }
@@ -63,9 +74,6 @@ private:
 
     model::Board serverBoard_;
     LoopbackTransport transport_;
-    // A private in-memory account store: local play has no real users, but the
-    // session needs one, and this keeps SQLite out of the client entirely.
-    server::InMemoryUserStore store_;
     server::GameSession session_;
     RemoteGame remote_;
 };

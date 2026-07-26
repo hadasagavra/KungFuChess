@@ -154,4 +154,6 @@ GameSnapshot GameEngine::getSnapshot() const {
 
 bool GameEngine::isGameOver() const { return gameState_.isOver(); }
 
+void GameEngine::endGame() { gameState_.markOver(); }
+
 }  // namespace kfc::engine

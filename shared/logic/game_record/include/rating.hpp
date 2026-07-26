@@ -14,6 +14,11 @@ constexpr int defaultRating = 1200;
 // The maximum a single game can move a rating (the Elo K-factor).
 constexpr int kFactor = 32;
 
+// How close two players' ratings must be for the Play button to match them. It
+// lives here, with the rating rule, so matchmaking and the rating share one
+// definition of "an even match".
+constexpr int eloMatchRange = 100;
+
 // The expected score of `rating` against `opponentRating`, in [0, 1]: the
 // probability-like share of a win the ratings alone predict. Equal ratings give
 // 0.5; a higher rating gives more.

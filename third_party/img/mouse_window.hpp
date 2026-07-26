@@ -65,6 +65,13 @@ public:
      */
     std::vector<MouseEvent> takeMouseEvents();
 
+    /**
+     * Hand over the key codes typed since the last call, leaving none behind.
+     * Codes are raw (OpenCV waitKey): printable characters are their ASCII value;
+     * Backspace is 8, Enter 13, Escape 27. Interpreting them is the caller's job.
+     */
+    std::vector<int> takeKeys();
+
 private:
     // Mouse callback registered with OpenCV. userdata points at the owning
     // MouseWindow. Appends left clicks and left double-clicks to events_, in the
@@ -75,4 +82,5 @@ private:
 
     std::string title_;
     std::vector<MouseEvent> events_;
+    std::vector<int> keys_;
 };

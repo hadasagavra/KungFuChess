@@ -47,6 +47,25 @@ const char* const scoreLabel = "Score: ";
 const char* const timeHeading = "Time";
 const char* const moveHeading = "Move";
 
+// The Home screen and the over-the-board overlays.
+const cv::Scalar lobbyBackColor{48, 40, 40, 255};
+const cv::Scalar lobbyTitleColor{240, 240, 240, 255};
+const cv::Scalar lobbyStatusColor{140, 200, 240, 255};
+const cv::Scalar lobbyButtonColor{80, 120, 80, 255};
+const cv::Scalar lobbyButtonTextColor{255, 255, 255, 255};
+const cv::Scalar textBoxColor{255, 255, 255, 255};
+const cv::Scalar textBoxTextColor{20, 20, 20, 255};
+const cv::Scalar bannerColor{240, 220, 140, 255};
+const cv::Scalar countdownColor{60, 60, 240, 255};  // BGRA red
+
+// The game-over banner: a dim wash over the whole frame, then big white text.
+const cv::Scalar gameOverDimColor{0, 0, 0, 255};    // BGRA black
+const double gameOverDimAlpha = 0.6;
+const cv::Scalar gameOverTextColor{255, 255, 255, 255};
+const char* const gameOverText = "GAME OVER";
+const double gameOverFontSize = 3.0;
+const int gameOverThickness = 8;
+
 }  // namespace
 
 Renderer::Renderer(RenderConfig config) : config_(std::move(config)) {}
@@ -64,7 +83,66 @@ Img Renderer::renderFrame(const GameSnapshot& snapshot) const {
     }
     drawPanelOn(frame, snapshot.blackPanel, layout.blackPanel);
     drawPanelOn(frame, snapshot.whitePanel, layout.whitePanel);
+    drawOverlaysOn(frame, snapshot);
+    if (snapshot.gameOver) drawGameOverOn(frame, layout);
     return frame;
+}
+
+Img Renderer::renderLobby(const LobbyView& view) const {
+    Img frame;
+    frame.create(lobbyWidth, lobbyHeight, lobbyBackColor);
+
+    frame.put_text(view.title, lobbyWidth / 2 - 170, 90, 1.4, lobbyTitleColor, 3);
+    if (!view.status.empty()) {
+        frame.put_text(view.status, 60, 150, 0.7, lobbyStatusColor, 1);
+    }
+
+    if (view.dialogOpen) {
+        // A labelled text box showing the room id the player is typing.
+        const int boxX = lobbyWidth / 2 - 150;
+        const int boxY = 210;
+        frame.put_text("Room ID:", boxX, boxY - 12, 0.6, lobbyTitleColor, 1);
+        frame.draw_rect(boxX, boxY, 300, 50, textBoxColor, cv::FILLED);
+        frame.put_text(view.textbox, boxX + 12, boxY + 34, 0.9, textBoxTextColor, 2);
+    }
+
+    for (const LobbyButton& button : view.buttons) {
+        frame.draw_rect(button.topLeft.x, button.topLeft.y, button.width,
+                        button.height, lobbyButtonColor, cv::FILLED);
+        frame.put_text(button.label, button.topLeft.x + 24,
+                       button.topLeft.y + button.height / 2 + 8, 0.9,
+                       lobbyButtonTextColor, 2);
+    }
+    return frame;
+}
+
+void Renderer::drawOverlaysOn(Img& frame, const GameSnapshot& snapshot) const {
+    if (!snapshot.roomBanner.empty()) {
+        frame.put_text(snapshot.roomBanner, snapshot.boardOrigin.x + 8, 26, 0.7,
+                       bannerColor, 2);
+    }
+    if (snapshot.opponentCountdown) {
+        const std::string text = "Opponent left -- forfeit in " +
+                                 std::to_string(*snapshot.opponentCountdown) + "s";
+        frame.put_text(text, snapshot.boardOrigin.x + 8,
+                       snapshot.boardOrigin.y + 30, 0.8, countdownColor, 2);
+    }
+}
+
+void Renderer::drawGameOverOn(Img& frame, const FrameLayout& layout) const {
+    // Wash the whole frame so the ended board recedes behind the message.
+    frame.draw_rect(0, 0, layout.frameWidth, layout.frameHeight, gameOverDimColor,
+                    cv::FILLED, gameOverDimAlpha);
+    // Centre the text using the same font Img draws with, so it sits mid-frame
+    // whatever the board size.
+    int baseline = 0;
+    const cv::Size textSize =
+        cv::getTextSize(gameOverText, cv::FONT_HERSHEY_SIMPLEX, gameOverFontSize,
+                        gameOverThickness, &baseline);
+    const int x = (layout.frameWidth - textSize.width) / 2;
+    const int y = (layout.frameHeight + textSize.height) / 2;
+    frame.put_text(gameOverText, x, y, gameOverFontSize, gameOverTextColor,
+                   gameOverThickness);
 }
 
 Img Renderer::createCanvas(const FrameLayout& layout) const {

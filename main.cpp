@@ -25,6 +25,7 @@
 #include "texttests/include/script_parser.hpp"
 #include "texttests/include/script_runner.hpp"
 #include "client/view/include/image_view.hpp"
+#include "client/view/include/lobby_view.hpp"
 #include "client/view/include/render_config.hpp"
 #include "client/view/include/render_layout.hpp"
 #include "client/view/include/scene_translator.hpp"
@@ -97,6 +98,22 @@ std::string nameOr(const std::string& name, const char* fallback) {
     return name.empty() ? fallback : name;
 }
 
+// Apply one typed key to the room-id text box. Room ids are short uppercase
+// alphanumerics, so letters are folded to upper case and other keys (bar
+// Backspace) are ignored.
+void editRoomText(std::string& text, int key) {
+    constexpr std::size_t maxRoomIdLength = 8;
+    if (key == 8 || key == 127) {  // Backspace / Delete
+        if (!text.empty()) text.pop_back();
+    } else if (key >= 'a' && key <= 'z') {
+        if (text.size() < maxRoomIdLength) {
+            text.push_back(static_cast<char>(key - 'a' + 'A'));
+        }
+    } else if ((key >= 'A' && key <= 'Z') || (key >= '0' && key <= '9')) {
+        if (text.size() < maxRoomIdLength) text.push_back(static_cast<char>(key));
+    }
+}
+
 // Text harness: read a board + a script from `in`, replay the commands through
 // the public command path, and print board dumps to `out`. It drives a local
 // engine directly through a LocalGameAccess -- it is a test tool, not networked
@@ -157,6 +174,11 @@ int runGraphical(kfc::net::ClientGame& game, int boardWidth, int boardHeight,
     kfc::view::ImageView view{config};
     view.open();
 
+    // The Home screen's local UI state: whether the room dialog is open, and the
+    // room id being typed into it.
+    bool dialogOpen = false;
+    std::string roomText;
+
     auto last = std::chrono::steady_clock::now();
     while (view.isOpen()) {
         const auto now = std::chrono::steady_clock::now();
@@ -169,6 +191,47 @@ int runGraphical(kfc::net::ClientGame& game, int boardWidth, int boardHeight,
         if (const std::optional<std::string> error = game.authError()) {
             std::cout << "LOGIN FAILED: " << *error << "\n";
             return 1;
+        }
+
+        // The Home screen, shown until the server puts this client in a game.
+        // Local play is always "in game", so it never lands here.
+        if (!game.isInGame()) {
+            const std::vector<kfc::view::LobbyButton> buttons =
+                kfc::view::lobbyButtons(dialogOpen);
+            view.renderLobby(kfc::view::LobbyView{"KungFuChess",
+                                                  game.statusMessage(),
+                                                  dialogOpen, roomText, buttons});
+
+            if (dialogOpen) {
+                for (const int key : view.takeKeys()) editRoomText(roomText, key);
+            }
+            for (const kfc::view::MouseAction& action : view.takeMouseActions()) {
+                if (action.type != kfc::view::MouseAction::Type::Click) continue;
+                switch (kfc::view::buttonAt(buttons, action.position)) {
+                    case kfc::view::LobbyAction::Play:
+                        game.seekGame();
+                        break;
+                    case kfc::view::LobbyAction::OpenRoomDialog:
+                        dialogOpen = true;
+                        roomText.clear();
+                        break;
+                    case kfc::view::LobbyAction::Create:
+                        game.createRoom();
+                        dialogOpen = false;
+                        break;
+                    case kfc::view::LobbyAction::Join:
+                        if (!roomText.empty()) game.joinRoom(roomText);
+                        dialogOpen = false;
+                        break;
+                    case kfc::view::LobbyAction::Cancel:
+                        if (game.isSearching()) game.cancelSeek();
+                        dialogOpen = false;
+                        break;
+                    case kfc::view::LobbyAction::None:
+                        break;
+                }
+            }
+            continue;
         }
 
         // Highlight the selected piece's legal destinations, if any. The
@@ -192,7 +255,13 @@ int runGraphical(kfc::net::ClientGame& game, int boardWidth, int boardHeight,
             nameOr(game.blackName(), blackPlayerName),
             game.whiteRating(),
             game.blackRating()};
-        view.render(kfc::view::buildSnapshot(scene, config, layout), deltaMs);
+        kfc::view::GameSnapshot drawable =
+            kfc::view::buildSnapshot(scene, config, layout);
+        // The room id rides at the top of the board, and a disconnected
+        // opponent's forfeit countdown over it.
+        if (!game.roomId().empty()) drawable.roomBanner = "Room: " + game.roomId();
+        drawable.opponentCountdown = game.opponentCountdown();
+        view.render(drawable, deltaMs);
 
         // A double-click requests a jump; a single click drives the ordinary
         // select/move flow. A double-click also delivers the opening click that

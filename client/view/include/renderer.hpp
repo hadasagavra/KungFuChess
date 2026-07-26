@@ -3,6 +3,7 @@
 #include "img.hpp"
 #include "shared/logic/model/include/piece.hpp"
 #include "client/view/include/game_snapshot.hpp"
+#include "client/view/include/lobby_view.hpp"
 #include "client/view/include/render_config.hpp"
 #include "client/view/include/render_layout.hpp"
 
@@ -21,7 +22,17 @@ public:
     // non-blocking (Img::show() blocks on a keypress).
     Img renderFrame(const GameSnapshot& snapshot) const;
 
+    // Compose the Home screen (title, status, buttons, and -- in the dialog -- the
+    // room-id text box) as its own frame, sized to the lobby, not the board.
+    Img renderLobby(const LobbyView& view) const;
+
 private:
+    // Draw the room-id banner and, if an opponent is disconnected, the forfeit
+    // countdown, over the top of the board. No-op when neither is set.
+    void drawOverlaysOn(Img& frame, const GameSnapshot& snapshot) const;
+    // Dim the frame and stamp a large centred "GAME OVER" across it once the
+    // game has ended.
+    void drawGameOverOn(Img& frame, const FrameLayout& layout) const;
     Img createCanvas(const FrameLayout& layout) const;
     Img loadBoardBackground(int widthCells, int heightCells) const;
     Img loadSprite(model::Kind kind, model::Color color, model::State state,

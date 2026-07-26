@@ -36,6 +36,19 @@ public:
     // Why the server refused this client's login, if it did, so the composition
     // root can report it and stop. Absent on a local game and a successful login.
     virtual std::optional<std::string> authError() const = 0;
+
+    // -- Lobby: the Home screen drives these ------------------------------------
+    // A local game has no lobby: it is always in a game, so the actions do nothing
+    // and the state is empty. A networked game delegates to its server view.
+    virtual void seekGame() = 0;
+    virtual void cancelSeek() = 0;
+    virtual void createRoom() = 0;
+    virtual void joinRoom(const std::string& roomId) = 0;
+    virtual bool isSearching() const = 0;
+    virtual bool isInGame() const = 0;
+    virtual std::string roomId() const = 0;
+    virtual std::string statusMessage() const = 0;
+    virtual std::optional<int> opponentCountdown() const = 0;
 };
 
 }  // namespace kfc::net

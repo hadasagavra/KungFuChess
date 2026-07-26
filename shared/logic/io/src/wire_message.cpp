@@ -24,6 +24,17 @@ constexpr const char* loginTag = "LOGIN";      // a client's credentials
 constexpr const char* rosterTag = "ROSTER";    // both players' names + ratings
 constexpr const char* authFailTag = "AUTHFAIL";  // a refused login
 
+// Lobby message tags.
+constexpr const char* seekTag = "SEEK";        // Play: find any opponent
+constexpr const char* cancelSeekTag = "CANCEL";  // stop looking
+constexpr const char* createRoomTag = "CREATE";  // open a new room
+constexpr const char* joinRoomTag = "JOIN";      // join a room by id
+constexpr const char* enteredRoomTag = "ROOM";   // you are in this room
+constexpr const char* noMatchTag = "NOMATCH";    // search gave up
+constexpr const char* roomErrorTag = "ROOMERR";  // a lobby request failed
+constexpr const char* oppGoneTag = "OPPGONE";    // opponent dropped, N seconds
+constexpr const char* oppBackTag = "OPPBACK";    // opponent returned
+
 // The role payload for a spectator, distinct from either colour letter.
 constexpr char spectatorMark = '-';
 
@@ -188,8 +199,26 @@ std::string encode(const WireMessage& message, int boardHeight) {
                 return encodeLogin(value);
             } else if constexpr (std::is_same_v<T, PlayerRoster>) {
                 return encodeRoster(value);
-            } else {  // AuthRejected
+            } else if constexpr (std::is_same_v<T, AuthRejected>) {
                 return encodeAuthRejected(value);
+            } else if constexpr (std::is_same_v<T, SeekGame>) {
+                return std::string(seekTag);
+            } else if constexpr (std::is_same_v<T, CancelSeek>) {
+                return std::string(cancelSeekTag);
+            } else if constexpr (std::is_same_v<T, CreateRoom>) {
+                return std::string(createRoomTag);
+            } else if constexpr (std::is_same_v<T, JoinRoom>) {
+                return join(joinRoomTag, value.roomId);
+            } else if constexpr (std::is_same_v<T, EnteredRoom>) {
+                return join(enteredRoomTag, value.roomId);
+            } else if constexpr (std::is_same_v<T, NoMatch>) {
+                return std::string(noMatchTag);
+            } else if constexpr (std::is_same_v<T, RoomError>) {
+                return join(roomErrorTag, value.reason);
+            } else if constexpr (std::is_same_v<T, OpponentDisconnected>) {
+                return join(oppGoneTag, std::to_string(value.secondsLeft));
+            } else {  // OpponentReconnected
+                return std::string(oppBackTag);
             }
         },
         message);
@@ -232,6 +261,30 @@ std::optional<WireMessage> decode(const std::string& text, int boardHeight) {
                 decodeAuthRejected(parts.payload)) {
             return WireMessage{*rejected};
         }
+    } else if (parts.tag == seekTag) {
+        return WireMessage{SeekGame{}};
+    } else if (parts.tag == cancelSeekTag) {
+        return WireMessage{CancelSeek{}};
+    } else if (parts.tag == createRoomTag) {
+        return WireMessage{CreateRoom{}};
+    } else if (parts.tag == joinRoomTag) {
+        const std::string roomId = trim(parts.payload);
+        if (!roomId.empty()) return WireMessage{JoinRoom{roomId}};
+    } else if (parts.tag == enteredRoomTag) {
+        const std::string roomId = trim(parts.payload);
+        if (!roomId.empty()) return WireMessage{EnteredRoom{roomId}};
+    } else if (parts.tag == noMatchTag) {
+        return WireMessage{NoMatch{}};
+    } else if (parts.tag == roomErrorTag) {
+        return WireMessage{RoomError{parts.payload}};
+    } else if (parts.tag == oppGoneTag) {
+        try {
+            return WireMessage{OpponentDisconnected{std::stoi(parts.payload)}};
+        } catch (const std::exception&) {
+            return std::nullopt;
+        }
+    } else if (parts.tag == oppBackTag) {
+        return WireMessage{OpponentReconnected{}};
     }
     return std::nullopt;
 }

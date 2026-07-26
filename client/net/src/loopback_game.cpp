@@ -3,11 +3,13 @@
 #include <string>
 #include <utility>
 
+#include "shared/logic/game_record/include/rating.hpp"
+
 namespace kfc::net {
 
 LoopbackGame::LoopbackGame(model::Board startPosition)
     : serverBoard_(startPosition),
-      session_(serverBoard_, transport_, store_),
+      session_(serverBoard_, transport_),
       remote_(startPosition,
               [this](model::Color mover, const std::string& message) {
                   // Route the command to the seat that owns its colour, so the
@@ -20,8 +22,10 @@ LoopbackGame::LoopbackGame(model::Board startPosition)
     transport_.setClientSink(
         [this](const std::string& message) { remote_.receive(message); });
 
-    session_.addClient(whiteSeat);
-    session_.addClient(blackSeat);
+    // Local play has no login, so the two seats carry default identities; no
+    // account store is involved and ratings are never persisted.
+    session_.addClient(whiteSeat, "White", game_record::defaultRating);
+    session_.addClient(blackSeat, "Black", game_record::defaultRating);
 
     // Seed a first frame so the replica holds the real board before the first
     // render, without advancing the clock.

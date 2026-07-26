@@ -28,6 +28,17 @@ void ImageView::render(const GameSnapshot& snapshot, int deltaMs) {
     window_->showFrame(frame);
 }
 
+void ImageView::renderLobby(const LobbyView& view) {
+    window_->showFrame(renderer_.renderLobby(view));
+}
+
+std::vector<int> ImageView::takeKeys() {
+    if (!window_) {
+        return {};
+    }
+    return window_->takeKeys();
+}
+
 std::vector<MouseAction> ImageView::takeMouseActions() {
     if (!window_) {
         return {};

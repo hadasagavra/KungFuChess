@@ -7,6 +7,7 @@
 #include "client/view/include/animation_config_store.hpp"
 #include "client/view/include/animator.hpp"
 #include "client/view/include/game_snapshot.hpp"
+#include "client/view/include/lobby_view.hpp"
 #include "client/view/include/render_config.hpp"
 #include "client/view/include/renderer.hpp"
 
@@ -47,10 +48,18 @@ public:
     // advances the sprite animations. Call once per loop iteration after open().
     void render(const GameSnapshot& snapshot, int deltaMs);
 
+    // Render one Home-screen frame into the persistent window, without blocking.
+    // No animation is involved, so unlike render() it takes no delta.
+    void renderLobby(const LobbyView& view);
+
     // The mouse actions observed since the last call, in the order the user
     // produced them, leaving none behind. Empty before open(). Display only:
     // reports pixels, never cells.
     std::vector<MouseAction> takeMouseActions();
+
+    // The key codes typed since the last call (for the room-id text box), leaving
+    // none behind. Empty before open().
+    std::vector<int> takeKeys();
 
 private:
     Renderer renderer_;

@@ -41,6 +41,42 @@ struct PlayerRoster {
     std::optional<int> blackRating;
 };
 
+// -- Lobby messages -------------------------------------------------------------
+// The Home screen sends these before a game exists; the server answers with the
+// room the client ends up in (or why it could not). Roles inside a room still
+// arrive as the ordinary RoleAssignment the room's session sends when it seats a
+// client, so these say only "which room", never "which colour".
+
+// Client -> server: find me any opponent within Elo range (the Play button).
+struct SeekGame {};
+// Client -> server: stop looking (cancel a pending Play search).
+struct CancelSeek {};
+// Client -> server: open a fresh room and seat me as its first player.
+struct CreateRoom {};
+// Client -> server: put me in an existing room named by this id.
+struct JoinRoom {
+    std::string roomId;
+};
+
+// Server -> client: you are now in this room (created, joined, or matched). The
+// id is shown at the top of the screen; the seat follows as a RoleAssignment.
+struct EnteredRoom {
+    std::string roomId;
+};
+// Server -> client: the Play search gave up after its timeout ("can't find").
+struct NoMatch {};
+// Server -> client: a lobby request could not be honoured (e.g. unknown room id).
+struct RoomError {
+    std::string reason;
+};
+// Server -> client: the opponent dropped; this many seconds remain before they
+// forfeit. Broadcast each second of the grace window so the client can count down.
+struct OpponentDisconnected {
+    int secondsLeft;
+};
+// Server -> client: the opponent came back inside the grace window; play resumes.
+struct OpponentReconnected {};
+
 // A whole game frame on its way to a client. It carries the state_codec text as
 // an opaque payload rather than a decoded board: a board is decoded into the
 // client's own replica (state_codec fills a caller's Board in place), so pulling
@@ -60,7 +96,9 @@ struct StateUpdate {
 using WireMessage =
     std::variant<PlayerCommand, RoleAssignment, model::MoveEvent,
                  model::CapturedPiece, StateUpdate, Login, PlayerRoster,
-                 AuthRejected>;
+                 AuthRejected, SeekGame, CancelSeek, CreateRoom, JoinRoom,
+                 EnteredRoom, NoMatch, RoomError, OpponentDisconnected,
+                 OpponentReconnected>;
 
 // The one boundary where a typed message becomes wire text and back. The tag
 // strings that name each kind on the wire live only inside these two functions;

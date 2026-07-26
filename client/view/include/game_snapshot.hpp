@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -73,6 +74,13 @@ struct GameSnapshot {
     std::vector<PixelPoint> highlights;
     PlayerPanel whitePanel;
     PlayerPanel blackPanel;
+    // A top banner (the room id) and an opponent-disconnect countdown, drawn over
+    // the board when set. Both are empty/absent in local play.
+    std::string roomBanner;
+    std::optional<int> opponentCountdown;
+    // Whether the game has ended (king captured or a forfeit): the view draws a
+    // large "GAME OVER" banner over the board when true.
+    bool gameOver = false;
 };
 
 }  // namespace kfc::view

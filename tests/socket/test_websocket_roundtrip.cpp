@@ -7,7 +7,6 @@
 #include "client/net/include/networked_game.hpp"
 #include "server/app/include/game_session.hpp"
 #include "server/net/include/websocket_server.hpp"
-#include "server/store/include/in_memory_user_store.hpp"
 #include "shared/logic/io/include/board_parser.hpp"
 #include "shared/logic/model/include/board.hpp"
 #include "shared/logic/model/include/piece.hpp"
@@ -48,10 +47,11 @@ Board twoKnights() {
 TEST_CASE("a command crosses a real websocket and the state comes back") {
     Board board = twoKnights();
     WebSocketServer transport{testPort};
-    kfc::server::InMemoryUserStore users;
-    GameSession session{board, transport, users};
+    // This test drives a GameSession directly (not through the lobby): it seats
+    // the connecting client itself, so the client's own login is simply ignored.
+    GameSession session{board, transport};
     transport.onClientConnected(
-        [&session](ClientId id) { session.addClient(id); });
+        [&session](ClientId id) { session.addClient(id, "Tester", 1200); });
     transport.onMessage([&session](ClientId id, const std::string& message) {
         session.handleMessage(id, message);
     });

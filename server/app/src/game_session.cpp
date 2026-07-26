@@ -1,5 +1,6 @@
 #include "server/app/include/game_session.hpp"
 
+#include <utility>
 #include <variant>
 
 #include "shared/logic/game_record/include/rating.hpp"
@@ -21,8 +22,11 @@ overloaded(Ts...) -> overloaded<Ts...>;
 }  // namespace
 
 GameSession::GameSession(model::Board& board, MessageTransport& transport,
-                         UserStore& users)
-    : board_(board), engine_(board_), transport_(transport), users_(users) {
+                         RatingSink onRatingChanged)
+    : board_(board),
+      engine_(board_),
+      transport_(transport),
+      onRatingChanged_(std::move(onRatingChanged)) {
     // The engine announces what happened; the session forwards it to the clients.
     // The engine never learns a network is listening -- this is the network
     // publisher its EventBus was built to accept, added without touching it.
@@ -40,10 +44,38 @@ GameSession::GameSession(model::Board& board, MessageTransport& transport,
         });
 }
 
-void GameSession::addClient(ClientId client) {
+void GameSession::addClient(ClientId client, const std::string& username,
+                            int rating) {
     const std::optional<model::Color> color = assignColor();
     roles_[client] = color;
+    names_[client] = username;
+    ratings_[client] = rating;
     transport_.send(client, io::encode(io::RoleAssignment{color}, board_.height()));
+    broadcastRoster();
+}
+
+std::optional<GameSession::Seat> GameSession::playerSeat(ClientId client) const {
+    const auto role = roles_.find(client);
+    if (role == roles_.end() || !role->second) return std::nullopt;  // spectator
+    const auto name = names_.find(client);
+    const auto rating = ratings_.find(client);
+    if (name == names_.end() || rating == ratings_.end()) return std::nullopt;
+    return Seat{*role->second, name->second, rating->second};
+}
+
+void GameSession::vacate(ClientId client) {
+    roles_.erase(client);
+    names_.erase(client);
+    ratings_.erase(client);
+}
+
+void GameSession::seatReturning(ClientId client, model::Color color,
+                                const std::string& username, int rating) {
+    roles_[client] = color;
+    names_[client] = username;
+    ratings_[client] = rating;
+    transport_.send(client, io::encode(io::RoleAssignment{color}, board_.height()));
+    broadcastRoster();
 }
 
 void GameSession::handleMessage(ClientId client, const std::string& text) {
@@ -55,18 +87,37 @@ void GameSession::handleMessage(ClientId client, const std::string& text) {
                    [&](const io::PlayerCommand& command) {
                        handleCommand(client, command);
                    },
-                   [&](const io::Login& login) { handleLogin(client, login); },
-                   // A client cannot deal the server its own answers. These are
-                   // well-formed messages arriving from the wrong direction, so
-                   // they are simply not acted on.
+                   // Everything else is not a seated session's to act on: a
+                   // client's own login and lobby requests are the lobby's, and a
+                   // client cannot deal the server its own answers.
+                   [](const io::Login&) {},
                    [](const io::RoleAssignment&) {},
                    [](const io::PlayerRoster&) {},
                    [](const io::AuthRejected&) {},
                    [](const model::MoveEvent&) {},
                    [](const model::CapturedPiece&) {},
                    [](const io::StateUpdate&) {},
+                   [](const io::SeekGame&) {},
+                   [](const io::CancelSeek&) {},
+                   [](const io::CreateRoom&) {},
+                   [](const io::JoinRoom&) {},
+                   [](const io::EnteredRoom&) {},
+                   [](const io::NoMatch&) {},
+                   [](const io::RoomError&) {},
+                   [](const io::OpponentDisconnected&) {},
+                   [](const io::OpponentReconnected&) {},
                },
                *message);
+}
+
+void GameSession::forfeit(model::Color loser) {
+    if (engine_.isGameOver()) return;
+    engine_.endGame();
+    settleRatings(loser);
+    // Push the final frame so every client sees the game is over at once.
+    transport_.broadcast(
+        io::encode(io::StateUpdate{io::encodeState(engine_.getSnapshot())},
+                   board_.height()));
 }
 
 void GameSession::tick(int deltaMs) {
@@ -75,6 +126,8 @@ void GameSession::tick(int deltaMs) {
         io::encode(io::StateUpdate{io::encodeState(engine_.getSnapshot())},
                    board_.height()));
 }
+
+bool GameSession::isOver() const { return engine_.isGameOver(); }
 
 std::optional<model::Color> GameSession::colorOf(ClientId client) const {
     const auto found = roles_.find(client);
@@ -107,25 +160,6 @@ void GameSession::handleCommand(ClientId client, const io::PlayerCommand& comman
     }
 }
 
-void GameSession::handleLogin(ClientId client, const io::Login& login) {
-    // Credentials are the store's business, not a game rule. An unknown name is
-    // registered; a known one must match its password. A refusal is told only to
-    // the client that sent it -- there is nothing to broadcast.
-    const AuthResult auth = users_.authenticate(login.username, login.password);
-    if (!auth.accepted) {
-        transport_.send(client,
-                        io::encode(io::WireMessage{io::AuthRejected{
-                                       "incorrect password for " + login.username}},
-                                   board_.height()));
-        return;
-    }
-    // Accepted: record the name and current rating, and tell everyone the roster.
-    // A spectator may log in too; its name is kept but names no seat.
-    names_[client] = login.username;
-    ratings_[client] = auth.rating;
-    broadcastRoster();
-}
-
 std::map<ClientId, std::optional<model::Color>>::const_iterator
 GameSession::clientOn(model::Color color) const {
     for (auto it = roles_.begin(); it != roles_.end(); ++it) {
@@ -138,7 +172,7 @@ std::optional<std::string> GameSession::nameOfColor(model::Color color) const {
     const auto seat = clientOn(color);
     if (seat == roles_.end()) return std::nullopt;  // no client on this seat
     const auto found = names_.find(seat->first);
-    if (found == names_.end()) return std::nullopt;  // seated, not logged in yet
+    if (found == names_.end()) return std::nullopt;
     return found->second;
 }
 
@@ -161,7 +195,7 @@ void GameSession::settleRatings(model::Color loser) {
     const model::Color winner =
         loser == model::Color::White ? model::Color::Black : model::Color::White;
 
-    // Both seats must hold logged-in players, or there is no pair to rate.
+    // Both seats must hold players, or there is no pair to rate.
     const std::optional<std::string> winnerName = nameOfColor(winner);
     const std::optional<std::string> loserName = nameOfColor(loser);
     const std::optional<int> winnerRating = ratingOfColor(winner);
@@ -172,8 +206,10 @@ void GameSession::settleRatings(model::Color loser) {
         game_record::updatedRating(*winnerRating, *loserRating, 1.0);
     const int newLoser =
         game_record::updatedRating(*loserRating, *winnerRating, 0.0);
-    users_.updateRating(*winnerName, newWinner);
-    users_.updateRating(*loserName, newLoser);
+    if (onRatingChanged_) {
+        onRatingChanged_(*winnerName, newWinner);
+        onRatingChanged_(*loserName, newLoser);
+    }
     ratings_[clientOn(winner)->first] = newWinner;
     ratings_[clientOn(loser)->first] = newLoser;
     broadcastRoster();

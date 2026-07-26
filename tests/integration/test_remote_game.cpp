@@ -14,8 +14,14 @@
 
 using kfc::engine::GameSnapshot;
 using kfc::io::AuthRejected;
+using kfc::io::EnteredRoom;
+using kfc::io::NoMatch;
+using kfc::io::OpponentDisconnected;
+using kfc::io::OpponentReconnected;
 using kfc::io::PlayerRoster;
 using kfc::io::RoleAssignment;
+using kfc::io::RoomError;
+using kfc::io::SeekGame;
 using kfc::io::StateUpdate;
 using kfc::io::WireMessage;
 using kfc::model::Board;
@@ -112,4 +118,49 @@ TEST_CASE("a rejected login is recorded as an auth error") {
 
     REQUIRE(remote.authError());
     CHECK(*remote.authError() == "incorrect password for Alice");
+}
+
+TEST_CASE("entering a room moves the client into the game") {
+    RemoteGame remote = makeRemote();
+    CHECK_FALSE(remote.isInGame());
+
+    remote.receive(kfc::io::encode(WireMessage{EnteredRoom{"AB12CD"}}, boardHeight));
+
+    CHECK(remote.isInGame());
+    CHECK(remote.roomId() == "AB12CD");
+    CHECK_FALSE(remote.isSearching());
+}
+
+TEST_CASE("seeking sets searching, and no-match reports it") {
+    std::string sent;
+    RemoteGame remote{Board{boardHeight, boardHeight},
+                      [&](Color, const std::string& message) { sent = message; }};
+
+    remote.seekGame();
+    CHECK(remote.isSearching());
+    CHECK_FALSE(sent.empty());  // a SeekGame went out
+
+    remote.receive(kfc::io::encode(WireMessage{NoMatch{}}, boardHeight));
+    CHECK_FALSE(remote.isSearching());
+    CHECK(remote.statusMessage() == "Couldn't find a match");
+}
+
+TEST_CASE("a room error becomes the status message") {
+    RemoteGame remote = makeRemote();
+    remote.receive(kfc::io::encode(WireMessage{RoomError{"no room ZZ99"}},
+                                   boardHeight));
+    CHECK(remote.statusMessage() == "no room ZZ99");
+}
+
+TEST_CASE("an opponent's disconnect countdown is tracked and then cleared") {
+    RemoteGame remote = makeRemote();
+    CHECK_FALSE(remote.opponentCountdown());
+
+    remote.receive(
+        kfc::io::encode(WireMessage{OpponentDisconnected{12}}, boardHeight));
+    REQUIRE(remote.opponentCountdown());
+    CHECK(*remote.opponentCountdown() == 12);
+
+    remote.receive(kfc::io::encode(WireMessage{OpponentReconnected{}}, boardHeight));
+    CHECK_FALSE(remote.opponentCountdown());
 }

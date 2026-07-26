@@ -107,6 +107,7 @@ GameSnapshot buildSnapshot(const SceneInput& input, const RenderConfig& config,
     snapshot.boardWidth = state.width();
     snapshot.boardHeight = state.height();
     snapshot.boardOrigin = layout.boardOrigin;
+    snapshot.gameOver = state.isOver();
     snapshot.whitePanel =
         buildPanel(model::Color::White, input, config, layout.whitePanel);
     snapshot.blackPanel =

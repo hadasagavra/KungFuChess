@@ -32,8 +32,10 @@ void MouseWindow::showFrame(const Img& frame) {
 
     cv::imshow(title_, frame.get_mat());
     // Non-blocking: pump the GUI event queue (mouse callback, resize) for ~1ms
-    // and return, so the caller keeps control of the render loop.
-    cv::waitKey(1);
+    // and return, so the caller keeps control of the render loop. waitKey also
+    // reports a typed key (or -1 for none), which feeds the on-screen text box.
+    const int key = cv::waitKey(1);
+    if (key >= 0) keys_.push_back(key);
 }
 
 bool MouseWindow::isWindowOpen() const {
@@ -44,6 +46,12 @@ bool MouseWindow::isWindowOpen() const {
 std::vector<MouseEvent> MouseWindow::takeMouseEvents() {
     std::vector<MouseEvent> taken;
     taken.swap(events_);
+    return taken;
+}
+
+std::vector<int> MouseWindow::takeKeys() {
+    std::vector<int> taken;
+    taken.swap(keys_);
     return taken;
 }
 

@@ -56,10 +56,36 @@ void RemoteGame::receive(const std::string& message) {
                    [this](const io::AuthRejected& rejected) {
                        authError_ = rejected.reason;
                    },
-                   // A client never receives its own commands or logins back;
-                   // neither changes what it draws, so both are ignored here.
+                   // The lobby's answers: which room we are in, why a request
+                   // failed, and an opponent's disconnect countdown.
+                   [this](const io::EnteredRoom& entered) {
+                       inGame_ = true;
+                       searching_ = false;
+                       roomId_ = entered.roomId;
+                       statusMessage_.clear();
+                   },
+                   [this](const io::NoMatch&) {
+                       searching_ = false;
+                       statusMessage_ = "Couldn't find a match";
+                   },
+                   [this](const io::RoomError& error) {
+                       searching_ = false;
+                       statusMessage_ = error.reason;
+                   },
+                   [this](const io::OpponentDisconnected& gone) {
+                       opponentCountdown_ = gone.secondsLeft;
+                   },
+                   [this](const io::OpponentReconnected&) {
+                       opponentCountdown_.reset();
+                   },
+                   // A client never receives its own requests or login back;
+                   // none change what it draws, so all are ignored here.
                    [](const io::PlayerCommand&) {},
                    [](const io::Login&) {},
+                   [](const io::SeekGame&) {},
+                   [](const io::CancelSeek&) {},
+                   [](const io::CreateRoom&) {},
+                   [](const io::JoinRoom&) {},
                },
                *decoded);
 }
@@ -117,5 +143,27 @@ void RemoteGame::requestMove(model::Position from, model::Position to) {
 }
 
 void RemoteGame::requestJump(model::Position cell) { sendCommand(cell, cell); }
+
+void RemoteGame::sendLobby(const io::WireMessage& message) {
+    sink_(model::Color::White, io::encode(message, replica_.height()));
+}
+
+void RemoteGame::seekGame() {
+    searching_ = true;
+    statusMessage_ = "Searching for an opponent...";
+    sendLobby(io::WireMessage{io::SeekGame{}});
+}
+
+void RemoteGame::cancelSeek() {
+    searching_ = false;
+    statusMessage_.clear();
+    sendLobby(io::WireMessage{io::CancelSeek{}});
+}
+
+void RemoteGame::createRoom() { sendLobby(io::WireMessage{io::CreateRoom{}}); }
+
+void RemoteGame::joinRoom(const std::string& roomId) {
+    sendLobby(io::WireMessage{io::JoinRoom{roomId}});
+}
 
 }  // namespace kfc::net

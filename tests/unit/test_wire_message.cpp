@@ -7,10 +7,19 @@
 #include "shared/logic/io/include/wire_message.hpp"
 
 using kfc::io::AuthRejected;
+using kfc::io::CancelSeek;
+using kfc::io::CreateRoom;
 using kfc::io::decode;
 using kfc::io::encode;
+using kfc::io::EnteredRoom;
+using kfc::io::JoinRoom;
 using kfc::io::Login;
+using kfc::io::NoMatch;
+using kfc::io::OpponentDisconnected;
+using kfc::io::OpponentReconnected;
 using kfc::io::PlayerRoster;
+using kfc::io::RoomError;
+using kfc::io::SeekGame;
 using kfc::io::WireMessage;
 
 namespace {
@@ -104,4 +113,41 @@ TEST_CASE("an auth rejection round-trips its reason") {
         roundTrip(AuthRejected{"incorrect password for Alice"});
     REQUIRE(back);
     CHECK(back->reason == "incorrect password for Alice");
+}
+
+TEST_CASE("the empty lobby messages round-trip by type") {
+    CHECK(roundTrip(SeekGame{}));
+    CHECK(roundTrip(CancelSeek{}));
+    CHECK(roundTrip(CreateRoom{}));
+    CHECK(roundTrip(NoMatch{}));
+    CHECK(roundTrip(OpponentReconnected{}));
+}
+
+TEST_CASE("a join carries its room id") {
+    const std::optional<JoinRoom> back = roundTrip(JoinRoom{"AB12CD"});
+    REQUIRE(back);
+    CHECK(back->roomId == "AB12CD");
+    // A blank room id is meaningless, so it is not a message.
+    CHECK_FALSE(decode("JOIN ", boardHeight));
+}
+
+TEST_CASE("entering a room carries the room id") {
+    const std::optional<EnteredRoom> back = roundTrip(EnteredRoom{"AB12CD"});
+    REQUIRE(back);
+    CHECK(back->roomId == "AB12CD");
+}
+
+TEST_CASE("a room error carries its reason") {
+    const std::optional<RoomError> back = roundTrip(RoomError{"no such room"});
+    REQUIRE(back);
+    CHECK(back->reason == "no such room");
+}
+
+TEST_CASE("a disconnect countdown carries the seconds left") {
+    const std::optional<OpponentDisconnected> back =
+        roundTrip(OpponentDisconnected{17});
+    REQUIRE(back);
+    CHECK(back->secondsLeft == 17);
+    // A non-numeric countdown is malformed.
+    CHECK_FALSE(decode("OPPGONE soon", boardHeight));
 }

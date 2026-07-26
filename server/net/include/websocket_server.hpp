@@ -28,6 +28,10 @@ public:
     void onClientConnected(std::function<void(ClientId)> handler);
     void onMessage(std::function<void(ClientId, const std::string&)> handler);
 
+    // Called with a client's id when its connection closes (it left or dropped),
+    // so the lobby can start a forfeit countdown or free a spectator.
+    void onClientDisconnected(std::function<void(ClientId)> handler);
+
     // Handle any ready network events (accepts, reads) without blocking.
     void poll();
 

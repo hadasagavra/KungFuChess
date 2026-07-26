@@ -9,6 +9,7 @@
 #include "client/input/include/game_access.hpp"
 #include "shared/bus/include/event_bus.hpp"
 #include "shared/logic/engine/include/game_engine.hpp"
+#include "shared/logic/io/include/wire_message.hpp"
 #include "shared/logic/model/include/board.hpp"
 #include "shared/logic/model/include/piece.hpp"
 #include "shared/logic/model/include/position.hpp"
@@ -66,6 +67,26 @@ public:
     // Why the server refused this client's login, if it did (bad password).
     const std::optional<std::string>& authError() const { return authError_; }
 
+    // -- Lobby: the Home screen drives these ------------------------------------
+    // Ask the server for any opponent (Play), or stop asking.
+    void seekGame();
+    void cancelSeek();
+    // Open a fresh room, or join one by id.
+    void createRoom();
+    void joinRoom(const std::string& roomId);
+
+    // True while a Play search is outstanding (before a match or a timeout).
+    bool isSearching() const { return searching_; }
+    // True once the server has put this client in a room -- time to draw the game.
+    bool isInGame() const { return inGame_; }
+    // The room this client is in, shown at the top of the screen (empty in Home).
+    const std::string& roomId() const { return roomId_; }
+    // A one-line status for the Home screen ("Searching…", "Couldn't find…", an
+    // error), or empty when there is nothing to say.
+    const std::string& statusMessage() const { return statusMessage_; }
+    // Seconds until an absent opponent forfeits, while one is disconnected.
+    std::optional<int> opponentCountdown() const { return opponentCountdown_; }
+
     std::optional<model::Piece> pieceAt(model::Position cell) const override;
     void requestMove(model::Position from, model::Position to) override;
     void requestJump(model::Position cell) override;
@@ -77,6 +98,10 @@ private:
     // Encode and send a command for the piece on `from` going to `to` (to == from
     // is a jump). Does nothing if no piece sits there to name the mover.
     void sendCommand(model::Position from, model::Position to);
+    // Send a lobby message (no piece colour). The sink takes a colour to pick a
+    // loopback seat, but lobby play is networked-only, where the sink ignores it,
+    // so any colour serves here.
+    void sendLobby(const io::WireMessage& message);
 
     // Whether this client is allowed to command the given colour right now.
     bool mayCommand(model::Color color) const {
@@ -96,6 +121,11 @@ private:
     std::optional<int> whiteRating_;
     std::optional<int> blackRating_;
     std::optional<std::string> authError_;
+    bool searching_ = false;
+    bool inGame_ = false;
+    std::string roomId_;
+    std::string statusMessage_;
+    std::optional<int> opponentCountdown_;
 };
 
 }  // namespace kfc::net

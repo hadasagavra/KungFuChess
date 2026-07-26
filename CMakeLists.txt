@@ -153,6 +153,7 @@ add_library(kfc_view_core STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/animation_config_store.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/animator.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/asset_paths.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/lobby_view.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/render_layout.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/client/view/src/scene_translator.cpp")
 

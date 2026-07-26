@@ -54,6 +54,22 @@ public:
         return remote_.authError();
     }
 
+    void seekGame() override { remote_.seekGame(); }
+    void cancelSeek() override { remote_.cancelSeek(); }
+    void createRoom() override { remote_.createRoom(); }
+    void joinRoom(const std::string& roomId) override {
+        remote_.joinRoom(roomId);
+    }
+    bool isSearching() const override { return remote_.isSearching(); }
+    bool isInGame() const override { return remote_.isInGame(); }
+    std::string roomId() const override { return remote_.roomId(); }
+    std::string statusMessage() const override {
+        return remote_.statusMessage();
+    }
+    std::optional<int> opponentCountdown() const override {
+        return remote_.opponentCountdown();
+    }
+
     std::optional<model::Piece> pieceAt(model::Position cell) const override {
         return remote_.pieceAt(cell);
     }

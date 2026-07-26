@@ -77,6 +77,12 @@ public:
     GameSnapshot getSnapshot() const;
     bool isGameOver() const;
 
+    // End the game now without a capture -- a forfeit. After this the game is
+    // over exactly as if a king had been taken: no further command is accepted.
+    // The engine owns the game-over state; who decides to forfeit (a disconnect,
+    // say) is the caller's business.
+    void endGame();
+
     // The squares the piece on `source` may currently move to, for display
     // highlighting. Empty unless the game is live and the piece is idle -- this
     // mirrors the real-time gate in requestMove, so the GUI only highlights
