@@ -62,3 +62,6 @@ third_party/opencv/
 
 # Generated render output (demo/smoke artifacts)
 client/assets/_*.png
+
+# SQLite user database, created at runtime by the server
+*.db

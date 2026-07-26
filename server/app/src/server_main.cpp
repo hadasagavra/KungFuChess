@@ -8,6 +8,7 @@
 
 #include "server/app/include/game_session.hpp"
 #include "server/net/include/websocket_server.hpp"
+#include "server/store/include/sqlite_user_store.hpp"
 #include "shared/logic/io/include/board_parser.hpp"
 #include "shared/logic/model/include/board.hpp"
 
@@ -17,6 +18,9 @@ namespace {
 // text the client loads, so the two composition roots share one description of
 // the opening position instead of each hard-coding it.
 const char* const startPositionPath = "config/start_position.txt";
+
+// The account database, created beside the server on first run.
+const char* const userDatabasePath = "kfc_users.db";
 
 // The default listen port; a first argument overrides it.
 constexpr std::uint16_t defaultPort = 9000;
@@ -58,7 +62,8 @@ int main(int argc, char** argv) {
 
         const std::uint16_t port = portFrom(argc, argv);
         kfc::server::WebSocketServer transport{port};
-        kfc::server::GameSession session{board, transport};
+        kfc::server::SqliteUserStore users{userDatabasePath};
+        kfc::server::GameSession session{board, transport, users};
 
         transport.onClientConnected(
             [&session](kfc::server::ClientId id) { session.addClient(id); });

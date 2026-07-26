@@ -69,9 +69,15 @@ const realtime::CooldownState* cooldownAt(
 
 PlayerPanel buildPanel(model::Color player, const SceneInput& input,
                        const RenderConfig& config, const PanelBounds& bounds) {
+    const bool isWhite = player == model::Color::White;
+    const std::string& name = isWhite ? input.whiteName : input.blackName;
+    const std::optional<int> rating =
+        isWhite ? input.whiteRating : input.blackRating;
+
     PlayerPanel panel;
-    panel.name = player == model::Color::White ? input.whiteName
-                                               : input.blackName;
+    // The rating rides alongside the name -- "Alice (1200)" -- so the renderer
+    // stays a name-and-score drawer and gains no rating concept of its own.
+    panel.name = rating ? name + " (" + std::to_string(*rating) + ")" : name;
     panel.score = input.scoreBoard.scoreFor(player);
 
     const std::vector<model::MoveEvent>& entries =

@@ -29,7 +29,8 @@ namespace kfc::net {
 class NetworkedGame : public ClientGame {
 public:
     NetworkedGame(const std::string& host, std::uint16_t port,
-                  model::Board replica);
+                  model::Board replica, std::string username,
+                  std::string password);
 
     void advance(int deltaMs) override;
     engine::GameSnapshot getSnapshot() const override {
@@ -40,6 +41,18 @@ public:
         return remote_.legalDestinationsFor(source);
     }
     bus::EventBus& events() override { return remote_.events(); }
+
+    std::string whiteName() const override { return remote_.whiteName(); }
+    std::string blackName() const override { return remote_.blackName(); }
+    std::optional<int> whiteRating() const override {
+        return remote_.whiteRating();
+    }
+    std::optional<int> blackRating() const override {
+        return remote_.blackRating();
+    }
+    std::optional<std::string> authError() const override {
+        return remote_.authError();
+    }
 
     std::optional<model::Piece> pieceAt(model::Position cell) const override {
         return remote_.pieceAt(cell);
@@ -52,7 +65,17 @@ public:
     }
 
 private:
+    // Send this client's login the moment the socket opens (the server's role
+    // assignment is already on its way back). Named here so the constructor can
+    // hand it to the WebSocketClient's open handler.
+    void sendLogin();
+
+    // Declared before remote_ so the board height can be read from the replica
+    // before it is moved into remote_.
     WebSocketClient client_;
+    int boardHeight_;
+    std::string username_;
+    std::string password_;
     RemoteGame remote_;
 };
 

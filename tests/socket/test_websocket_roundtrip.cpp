@@ -7,6 +7,7 @@
 #include "client/net/include/networked_game.hpp"
 #include "server/app/include/game_session.hpp"
 #include "server/net/include/websocket_server.hpp"
+#include "server/store/include/in_memory_user_store.hpp"
 #include "shared/logic/io/include/board_parser.hpp"
 #include "shared/logic/model/include/board.hpp"
 #include "shared/logic/model/include/piece.hpp"
@@ -47,7 +48,8 @@ Board twoKnights() {
 TEST_CASE("a command crosses a real websocket and the state comes back") {
     Board board = twoKnights();
     WebSocketServer transport{testPort};
-    GameSession session{board, transport};
+    kfc::server::InMemoryUserStore users;
+    GameSession session{board, transport, users};
     transport.onClientConnected(
         [&session](ClientId id) { session.addClient(id); });
     transport.onMessage([&session](ClientId id, const std::string& message) {
@@ -58,7 +60,7 @@ TEST_CASE("a command crosses a real websocket and the state comes back") {
     // square is proof a state frame actually arrived over the socket rather than
     // being assumed. (The real app seeds the replica from the config board, so it
     // is never undersized; here empty-but-sized makes the arrival observable.)
-    NetworkedGame game{"127.0.0.1", testPort, Board{8, 8}};
+    NetworkedGame game{"127.0.0.1", testPort, Board{8, 8}, "Tester", "pw"};
 
     // Pump both ends: the server accepts and reads, the clock advances and
     // broadcasts, the client pumps its socket. Stop as soon as `done` holds, or

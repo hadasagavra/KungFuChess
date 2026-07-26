@@ -83,6 +83,7 @@ endif()
 file(GLOB_RECURSE KFC_SERVER_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/server/net/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/server/app/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/server/store/src/*.cpp"
 )
 # server_main.cpp is the server executable's composition root, not library code:
 # keep its main() out of the lib the tests link (mirrors main.cpp vs kfc_lib).
@@ -92,8 +93,12 @@ list(REMOVE_ITEM KFC_SERVER_SOURCES
 add_library(kfc_server_lib STATIC ${KFC_SERVER_SOURCES})
 # kfc_websocket is PRIVATE: only websocket_server.cpp includes the WebSocket
 # headers, so they compile into this lib but are invisible to anything that
-# links it (its own headers stay clean via pimpl).
-target_link_libraries(kfc_server_lib PUBLIC kfc_lib PRIVATE kfc_websocket)
+# links it (its own headers stay clean via pimpl). winsqlite3 is the SQLite that
+# ships with Windows (header + import lib from the Windows SDK); only
+# sqlite_user_store.cpp touches it, so it too stays behind a pimpl. Both are
+# PRIVATE, but a static lib cannot resolve its own externals, so consumers link
+# them transitively -- harmless system libraries either way.
+target_link_libraries(kfc_server_lib PUBLIC kfc_lib PRIVATE kfc_websocket winsqlite3)
 
 # ---------------------------------------------------------------------------
 # kfc_client_net: the client's networking runtime -- RemoteGame (a client's view

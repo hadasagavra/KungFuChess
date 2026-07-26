@@ -1,6 +1,8 @@
 #pragma once
 
+#include <optional>
 #include <set>
+#include <string>
 
 #include "client/input/include/game_access.hpp"
 #include "shared/bus/include/event_bus.hpp"
@@ -22,6 +24,18 @@ public:
     virtual std::set<model::Position> legalDestinationsFor(
         model::Position source) const = 0;
     virtual bus::EventBus& events() = 0;
+
+    // The player names to show beside the board, empty until the server names
+    // them (a local game leaves them empty and the caller supplies defaults).
+    virtual std::string whiteName() const = 0;
+    virtual std::string blackName() const = 0;
+    // The player ratings to show, absent until the server sends them (a local
+    // game has no accounts, so it leaves them absent).
+    virtual std::optional<int> whiteRating() const = 0;
+    virtual std::optional<int> blackRating() const = 0;
+    // Why the server refused this client's login, if it did, so the composition
+    // root can report it and stop. Absent on a local game and a successful login.
+    virtual std::optional<std::string> authError() const = 0;
 };
 
 }  // namespace kfc::net

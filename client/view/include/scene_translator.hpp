@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -48,6 +49,8 @@ struct SceneInput {
     std::set<model::Position> highlights;
     std::string whiteName;
     std::string blackName;
+    std::optional<int> whiteRating;
+    std::optional<int> blackRating;
 };
 
 // One player's side panel: their name, their score, and their moves written out

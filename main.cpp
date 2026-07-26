@@ -21,6 +21,7 @@
 #include "shared/logic/game_record/include/move_log.hpp"
 #include "shared/logic/game_record/include/score_board.hpp"
 #include "shared/logic/io/include/board_parser.hpp"
+#include "shared/logic/io/include/text.hpp"
 #include "texttests/include/script_parser.hpp"
 #include "texttests/include/script_runner.hpp"
 #include "client/view/include/image_view.hpp"
@@ -57,6 +58,43 @@ int elapsedMsSince(std::chrono::steady_clock::time_point last,
     const auto ms =
         std::chrono::duration_cast<std::chrono::milliseconds>(now - last).count();
     return std::clamp(static_cast<int>(ms), 0, maxStepMs);
+}
+
+// Fallbacks used when nothing was entered, so a player is never nameless and the
+// login is never blank (a blank one the server could not authenticate).
+const char* const defaultUsername = "Player";
+const char* const defaultPassword = "password";
+
+// One line off the shell, trimmed, or the fallback if it was blank.
+std::string promptLine(std::istream& in, std::ostream& out, const char* label,
+                       const char* fallback) {
+    out << label << std::flush;
+    std::string line;
+    std::getline(in, line);
+    const std::string trimmed = kfc::io::trim(line);
+    return trimmed.empty() ? fallback : trimmed;
+}
+
+// Credentials entered on the shell before the window opens (a networked game
+// only). The password is read as ordinary text -- the shell offers no hidden
+// entry here, which is a known limitation of this simple client.
+struct Credentials {
+    std::string username;
+    std::string password;
+};
+
+Credentials promptCredentials(std::istream& in, std::ostream& out) {
+    Credentials credentials;
+    credentials.username =
+        promptLine(in, out, "Enter your username: ", defaultUsername);
+    credentials.password =
+        promptLine(in, out, "Enter your password: ", defaultPassword);
+    return credentials;
+}
+
+// A player's name if the game knows it, otherwise the given default label.
+std::string nameOr(const std::string& name, const char* fallback) {
+    return name.empty() ? fallback : name;
 }
 
 // Text harness: read a board + a script from `in`, replay the commands through
@@ -126,6 +164,13 @@ int runGraphical(kfc::net::ClientGame& game, int boardWidth, int boardHeight,
         game.advance(deltaMs);
         last = now;
 
+        // A refused login (wrong password) ends the session: report it and stop,
+        // rather than sit in a window that will never be seated.
+        if (const std::optional<std::string> error = game.authError()) {
+            std::cout << "LOGIN FAILED: " << *error << "\n";
+            return 1;
+        }
+
         // Highlight the selected piece's legal destinations, if any. The
         // Controller owns the selection; the game answers where that piece may
         // move. The composition root only plumbs the two together.
@@ -135,9 +180,18 @@ int runGraphical(kfc::net::ClientGame& game, int boardWidth, int boardHeight,
             highlights = game.legalDestinationsFor(*selected);
         }
         const kfc::engine::GameSnapshot state = game.getSnapshot();
+        // Names and ratings come from the game when it knows them (a networked
+        // roster); otherwise the default labels stand and no rating is shown
+        // (local play sets neither).
         const kfc::view::SceneInput scene{
-            state,      moveLog,          scoreBoard,
-            highlights, whitePlayerName,  blackPlayerName};
+            state,
+            moveLog,
+            scoreBoard,
+            highlights,
+            nameOr(game.whiteName(), whitePlayerName),
+            nameOr(game.blackName(), blackPlayerName),
+            game.whiteRating(),
+            game.blackRating()};
         view.render(kfc::view::buildSnapshot(scene, config, layout), deltaMs);
 
         // A double-click requests a jump; a single click drives the ordinary
@@ -206,8 +260,13 @@ int main(int argc, char** argv) {
                 std::cout << "ERROR bad address " << *connectArg << "\n";
                 return 1;
             }
+            // Ask for credentials on the shell before opening the window, and
+            // carry them to the server so it can authenticate and name the seats.
+            const Credentials credentials =
+                promptCredentials(std::cin, std::cout);
             kfc::net::NetworkedGame game{endpoint->host, endpoint->port,
-                                         parsed.board};
+                                         parsed.board, credentials.username,
+                                         credentials.password};
             return runGraphical(game, boardWidth, boardHeight, assetsRoot,
                                 kfc::view::defaultCellPx);
         }

@@ -25,9 +25,10 @@ struct ParsedInput {
 ParsedInput parseInput(std::istream& in);
 
 // Build a Board from its already-split grid rows (each row a whitespace-split
-// line of cell tokens). This is the one place that turns text cells into a
-// Board with piece ids, shared by parseInput and by state_codec so a board read
-// off the wire is reconstructed exactly as one read from a file.
+// line of cell tokens), assigning piece ids in row-major order. Used by
+// parseInput to read a board from a file, and by tests to state a board
+// compactly. (A board off the wire is rebuilt by state_codec instead, which
+// carries each piece's own id and lifecycle state rather than a bare grid.)
 //
 // Throws ParseError (empty_board, ROW_WIDTH_MISMATCH, UNKNOWN_TOKEN) on bad
 // input, the same vocabulary parseInput reports.

@@ -19,19 +19,21 @@ using kfc::model::Board;
 using kfc::model::Color;
 using kfc::model::Kind;
 using kfc::model::Position;
+using kfc::model::State;
 using kfc::realtime::CooldownState;
 using kfc::realtime::MotionState;
 
 namespace {
 
-// A compact 3x3 board so the assertions can name every cell.
+// A compact 3x3 board so the assertions can name every cell. buildBoard assigns
+// ids in row-major order: wK -> 1, bP -> 2, wR -> 3.
 Board sampleBoard() {
     return buildBoard({"wK . .", ". bP .", ". . wR"});
 }
 
 }  // namespace
 
-TEST_CASE("a frame's board round-trips into a replica") {
+TEST_CASE("a frame's pieces round-trip into a replica with id and identity") {
     Board board = sampleBoard();
     const GameSnapshot snapshot{board, false};
 
@@ -45,10 +47,30 @@ TEST_CASE("a frame's board round-trips into a replica") {
     REQUIRE(replica.getPieceAt(Position{0, 0}));
     CHECK(replica.getPieceAt(Position{0, 0})->getKind() == Kind::King);
     CHECK(replica.getPieceAt(Position{0, 0})->getColor() == Color::White);
+    // The id survives, so the view's Animator tracks the same piece across frames.
+    CHECK(replica.getPieceAt(Position{0, 0})->getId() == 1);
     REQUIRE(replica.getPieceAt(Position{1, 1}));
     CHECK(replica.getPieceAt(Position{1, 1})->getKind() == Kind::Pawn);
-    CHECK(replica.getPieceAt(Position{1, 1})->getColor() == Color::Black);
+    CHECK(replica.getPieceAt(Position{1, 1})->getId() == 2);
     CHECK_FALSE(replica.isOccupied(Position{0, 1}));
+}
+
+TEST_CASE("a piece's lifecycle state round-trips") {
+    // Without this the replica would show every piece Idle, so the view could
+    // never animate a slide, a jump, or a rest -- the regression this guards.
+    Board board = sampleBoard();
+    board.setPieceState(Position{0, 0}, State::Moving);
+    board.setPieceState(Position{1, 1}, State::Airborne);
+    board.setPieceState(Position{2, 2}, State::Resting);
+    const GameSnapshot snapshot{board, false};
+
+    Board replica{1, 1};
+    const std::optional<DecodedState> decoded =
+        decodeState(encodeState(snapshot), replica);
+    REQUIRE(decoded);
+    CHECK(replica.getPieceAt(Position{0, 0})->getState() == State::Moving);
+    CHECK(replica.getPieceAt(Position{1, 1})->getState() == State::Airborne);
+    CHECK(replica.getPieceAt(Position{2, 2})->getState() == State::Resting);
 }
 
 TEST_CASE("the game-over flag round-trips") {
@@ -100,14 +122,17 @@ TEST_CASE("a frame with no motions or cooldowns decodes to empty lists") {
 TEST_CASE("a malformed frame decodes to nothing and leaves the board untouched") {
     Board replica = sampleBoard();  // a real board we can prove is not overwritten
 
-    // No over line: mandatory, so its absence is not a frame.
-    CHECK_FALSE(decodeState("wK . .\n. bP .\n. . wR\n", replica));
+    // Both the over flag and the size line are mandatory.
+    CHECK_FALSE(decodeState("size 3 3\npiece 1 wK a3 I\n", replica));
+    CHECK_FALSE(decodeState("over 0\npiece 1 wK a3 I\n", replica));
     // Bad over flag.
-    CHECK_FALSE(decodeState("over 2\nwK\n", replica));
-    // Ragged board rows: the same failure board_parser reports for a file.
-    CHECK_FALSE(decodeState("over 0\nwK .\n. . .\n", replica));
-    // A motion line missing its progress field.
-    CHECK_FALSE(decodeState("over 0\nwK\nmotion a1 a1\n", replica));
+    CHECK_FALSE(decodeState("over 2\nsize 3 3\n", replica));
+    // Bad piece fields: unknown kind, unknown state letter, non-numeric id.
+    CHECK_FALSE(decodeState("over 0\nsize 3 3\npiece 1 wZ a3 I\n", replica));
+    CHECK_FALSE(decodeState("over 0\nsize 3 3\npiece 1 wK a3 X\n", replica));
+    CHECK_FALSE(decodeState("over 0\nsize 3 3\npiece x wK a3 I\n", replica));
+    // A piece off the declared board.
+    CHECK_FALSE(decodeState("over 0\nsize 3 3\npiece 1 wK a9 I\n", replica));
 
     // The board the caller passed in still stands.
     CHECK(replica.width() == 3);

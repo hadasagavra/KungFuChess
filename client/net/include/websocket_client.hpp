@@ -23,6 +23,10 @@ public:
 
     void onMessage(std::function<void(const std::string&)> handler);
 
+    // Called once the connection is open. This is the moment a first message
+    // (e.g. a login) can be sent, since sends before it are dropped.
+    void onOpen(std::function<void()> handler);
+
     // Handle any ready network events (handshake, reads) without blocking.
     void poll();
 

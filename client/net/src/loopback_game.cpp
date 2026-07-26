@@ -7,7 +7,7 @@ namespace kfc::net {
 
 LoopbackGame::LoopbackGame(model::Board startPosition)
     : serverBoard_(startPosition),
-      session_(serverBoard_, transport_),
+      session_(serverBoard_, transport_, store_),
       remote_(startPosition,
               [this](model::Color mover, const std::string& message) {
                   // Route the command to the seat that owns its colour, so the

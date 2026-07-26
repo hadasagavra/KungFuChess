@@ -7,6 +7,7 @@
 #include "client/net/include/loopback_transport.hpp"
 #include "client/net/include/remote_game.hpp"
 #include "server/app/include/game_session.hpp"
+#include "server/store/include/in_memory_user_store.hpp"
 #include "shared/bus/include/event_bus.hpp"
 #include "shared/logic/engine/include/game_engine.hpp"
 #include "shared/logic/model/include/board.hpp"
@@ -38,6 +39,14 @@ public:
     }
     bus::EventBus& events() override { return remote_.events(); }
 
+    // Local play sends no logins, so names stay empty (the composition root falls
+    // back to its default labels), there are no ratings, and no login can fail.
+    std::string whiteName() const override { return remote_.whiteName(); }
+    std::string blackName() const override { return remote_.blackName(); }
+    std::optional<int> whiteRating() const override { return std::nullopt; }
+    std::optional<int> blackRating() const override { return std::nullopt; }
+    std::optional<std::string> authError() const override { return std::nullopt; }
+
     std::optional<model::Piece> pieceAt(model::Position cell) const override {
         return remote_.pieceAt(cell);
     }
@@ -54,6 +63,9 @@ private:
 
     model::Board serverBoard_;
     LoopbackTransport transport_;
+    // A private in-memory account store: local play has no real users, but the
+    // session needs one, and this keeps SQLite out of the client entirely.
+    server::InMemoryUserStore store_;
     server::GameSession session_;
     RemoteGame remote_;
 };

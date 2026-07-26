@@ -29,6 +29,13 @@ namespace kfc::net {
 // moved, read from the replica. Who is allowed to issue that colour is settled
 // downstream -- by the sink's wiring in loopback (a seat per colour) and by the
 // server's ownership check either way.
+//
+// It also keeps the colours the server assigned it (ownColors_): a networked
+// client gets one (or none, as a spectator); a loopback client gets both, since
+// the one window is seated as each colour in turn. Highlights and outgoing
+// commands are gated by that set, so a spectator is view-only and a player never
+// highlights or moves the opponent's pieces. The server stays the authority; the
+// gate only spares it commands it would refuse and the GUI hints it would not.
 class RemoteGame : public input::GameAccess {
 public:
     // Sends one command message on behalf of the given colour. The colour lets a
@@ -40,12 +47,24 @@ public:
     RemoteGame(model::Board replica, CommandSink sink);
 
     // Apply one message the server sent: a state frame refreshes the replica; a
-    // move or capture event is republished locally; anything else is ignored.
+    // move or capture event is republished locally; a role assignment records
+    // which colour(s) this client may command; a roster records the player names
+    // and ratings; a rejection records why a login was refused; anything else is
+    // ignored.
     void receive(const std::string& message);
 
     engine::GameSnapshot getSnapshot() const;
     std::set<model::Position> legalDestinationsFor(model::Position source) const;
     bus::EventBus& events() { return bus_; }
+
+    // The player names the server last broadcast, empty until a roster arrives.
+    const std::string& whiteName() const { return whiteName_; }
+    const std::string& blackName() const { return blackName_; }
+    // The player ratings the server last broadcast, absent until a roster arrives.
+    std::optional<int> whiteRating() const { return whiteRating_; }
+    std::optional<int> blackRating() const { return blackRating_; }
+    // Why the server refused this client's login, if it did (bad password).
+    const std::optional<std::string>& authError() const { return authError_; }
 
     std::optional<model::Piece> pieceAt(model::Position cell) const override;
     void requestMove(model::Position from, model::Position to) override;
@@ -59,6 +78,11 @@ private:
     // is a jump). Does nothing if no piece sits there to name the mover.
     void sendCommand(model::Position from, model::Position to);
 
+    // Whether this client is allowed to command the given colour right now.
+    bool mayCommand(model::Color color) const {
+        return ownColors_.count(color) != 0;
+    }
+
     model::Board replica_;
     CommandSink sink_;
     bus::EventBus bus_;
@@ -66,6 +90,12 @@ private:
     bool isOver_ = false;
     std::vector<realtime::MotionState> motions_;
     std::vector<realtime::CooldownState> cooldowns_;
+    std::set<model::Color> ownColors_;
+    std::string whiteName_;
+    std::string blackName_;
+    std::optional<int> whiteRating_;
+    std::optional<int> blackRating_;
+    std::optional<std::string> authError_;
 };
 
 }  // namespace kfc::net

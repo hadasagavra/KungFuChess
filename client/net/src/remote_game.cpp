@@ -39,10 +39,27 @@ void RemoteGame::receive(const std::string& message) {
                    [this](const model::CapturedPiece& captured) {
                        bus_.publish(captured);
                    },
-                   // A client is told its role and its own commands echo nowhere;
+                   // The colour(s) this client may command; a spectator's role
+                   // carries none, leaving the set empty.
+                   [this](const io::RoleAssignment& role) {
+                       if (role.color) ownColors_.insert(*role.color);
+                   },
+                   // The player names and ratings, for the side panels to show.
+                   [this](const io::PlayerRoster& roster) {
+                       whiteName_ = roster.whiteName.value_or("");
+                       blackName_ = roster.blackName.value_or("");
+                       whiteRating_ = roster.whiteRating;
+                       blackRating_ = roster.blackRating;
+                   },
+                   // The server refused this client's login; the reason is kept
+                   // for the shell to report.
+                   [this](const io::AuthRejected& rejected) {
+                       authError_ = rejected.reason;
+                   },
+                   // A client never receives its own commands or logins back;
                    // neither changes what it draws, so both are ignored here.
-                   [](const io::RoleAssignment&) {},
                    [](const io::PlayerCommand&) {},
+                   [](const io::Login&) {},
                },
                *decoded);
 }
@@ -69,7 +86,11 @@ std::set<model::Position> RemoteGame::legalDestinationsFor(
     // The server remains the authority; a stray highlight only offers a move it
     // would refuse.
     if (isOver_ || isBusy(source)) return {};
-    if (!replica_.getPieceAt(source)) return {};
+    const std::shared_ptr<model::Piece> piece = replica_.getPieceAt(source);
+    if (!piece) return {};
+    // Only a piece this client may command is worth highlighting: a spectator
+    // highlights nothing, and a player never highlights the opponent's pieces.
+    if (!mayCommand(piece->getColor())) return {};
     return ruleEngine_.getLegalDestinations(replica_, source);
 }
 
@@ -83,6 +104,10 @@ void RemoteGame::sendCommand(model::Position from, model::Position to) {
     const std::shared_ptr<model::Piece> piece = replica_.getPieceAt(from);
     if (!piece) return;  // nothing there to name the mover
     const model::Color mover = piece->getColor();
+    // View-only unless this client owns the colour: a spectator sends nothing,
+    // and a player sends no command for the opponent's pieces. The server would
+    // refuse either way; this spares it the round trip.
+    if (!mayCommand(mover)) return;
     const io::PlayerCommand command{mover, piece->getKind(), from, to};
     sink_(mover, io::encode(io::WireMessage{command}, replica_.height()));
 }

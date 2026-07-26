@@ -19,6 +19,7 @@ struct WebSocketClient::Impl {
     ConnectionHdl hdl;
     bool open = false;
     std::function<void(const std::string&)> onMessage;
+    std::function<void()> onOpen;
 };
 
 WebSocketClient::WebSocketClient(const std::string& host, std::uint16_t port)
@@ -31,6 +32,7 @@ WebSocketClient::WebSocketClient(const std::string& host, std::uint16_t port)
     endpoint.set_open_handler([this](ConnectionHdl hdl) {
         impl_->hdl = hdl;
         impl_->open = true;
+        if (impl_->onOpen) impl_->onOpen();
     });
     endpoint.set_close_handler([this](ConnectionHdl) { impl_->open = false; });
     endpoint.set_fail_handler([this](ConnectionHdl) { impl_->open = false; });
@@ -49,6 +51,10 @@ WebSocketClient::~WebSocketClient() = default;
 
 void WebSocketClient::onMessage(std::function<void(const std::string&)> handler) {
     impl_->onMessage = std::move(handler);
+}
+
+void WebSocketClient::onOpen(std::function<void()> handler) {
+    impl_->onOpen = std::move(handler);
 }
 
 void WebSocketClient::poll() { impl_->endpoint.poll(); }
