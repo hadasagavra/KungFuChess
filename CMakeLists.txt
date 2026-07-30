@@ -13,12 +13,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 # ---------------------------------------------------------------------------
-# kfc_lib: all Business Logic + GUI + io + texttests sources (everything except
-# main.cpp and the tests). The app and the tests both link this, so each source
+# kfc_lib: shared/logic (model, rules, realtime, engine, game_record, io) plus
+# client/input and the texttests harness. No graphics: the drawing half of the
+# client lives in kfc_view. The app and the tests both link this, so each source
 # is compiled once.
 #
-# The sources are grouped by deployment target: shared/logic is the code a
-# future server and the client both need, client/ is client-only.
+# The sources are grouped by deployment target: shared/logic is the code the
+# server and the client both need, client/input is client-only.
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE KFC_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/shared/logic/model/src/*.cpp"
@@ -76,9 +77,9 @@ endif()
 # OpenCV: a server has no display. Kept a separate target so the tests can link
 # the session without pulling in the app's socket main.
 #
-# Globbed like kfc_lib. server/net today is header-only (the transport interface),
-# so the glob picks up server/app's sources; the pattern is ready for when the
-# net side gains a .cpp (the WebSocket transport).
+# Globbed like kfc_lib, across all three server sub-modules: net (the transport
+# interface plus the WebSocket implementation), app (the session, the rooms, the
+# lobby), and store (the user store and its SQLite backing).
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE KFC_SERVER_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/server/net/src/*.cpp"
@@ -261,9 +262,6 @@ target_link_libraries(unit_tests PRIVATE kfc_lib kfc_view_core kfc_server_lib
 #   <doctest/doctest.h>              (resolved via third_party/)
 target_include_directories(unit_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
-# ---------------------------------------------------------------------------
-# CTest: `ctest --test-dir build` runs the whole suite.
-# ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 # socket_tests: the one test that opens a real WebSocket (server + client in this
 # process over localhost). It lives in its own binary and its own CTest entry so
