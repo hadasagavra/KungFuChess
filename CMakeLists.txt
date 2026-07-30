@@ -179,10 +179,33 @@ target_include_directories(kfc_view PUBLIC
 target_include_directories(kfc_view SYSTEM PUBLIC "${OPENCV_INCLUDE_DIR}")
 
 # ---------------------------------------------------------------------------
-# kfc: the application (composition root).
+# client/app: the client's orchestration layer, the counterpart to server/app.
+# Split like the view (core vs graphics) so the pure half stays testable without
+# OpenCV:
+#   kfc_app_core -- the Home-screen controller, the CLI (options + credentials),
+#                   and the text harness. No OpenCV, so the unit tests link it.
+#   kfc_app      -- the frame loop (GameApp) and the composition-root function
+#                   (runClient). The only client-app half that links OpenCV.
+# Sources are listed explicitly (like kfc_view*): which half a file lands on is a
+# design decision about whether it may touch graphics.
 # ---------------------------------------------------------------------------
-add_executable(kfc "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
-target_link_libraries(kfc PRIVATE kfc_lib kfc_view kfc_client_net)
+add_library(kfc_app_core STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/app/src/cli.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/app/src/lobby_controller.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/app/src/script_mode.cpp")
+target_link_libraries(kfc_app_core PUBLIC kfc_client_net kfc_view_core)
+
+add_library(kfc_app STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/app/src/client_app.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/client/app/src/game_app.cpp")
+target_link_libraries(kfc_app PUBLIC kfc_app_core kfc_view kfc_client_net)
+
+# ---------------------------------------------------------------------------
+# kfc: the client application. Its entry point (client_main.cpp) is a thin shim;
+# everything else lives in client/app, reached through kfc_app.
+# ---------------------------------------------------------------------------
+add_executable(kfc "${CMAKE_CURRENT_SOURCE_DIR}/client/app/src/client_main.cpp")
+target_link_libraries(kfc PRIVATE kfc_app)
 
 # The prebuilt OpenCV is a DLL: drop it next to kfc.exe so the app runs from the
 # build tree without needing OpenCV on PATH.
@@ -231,7 +254,7 @@ add_executable(unit_tests
 # kfc_client_net the RemoteGame/loopback the integration tests drive. None drags
 # OpenCV into the test binary.
 target_link_libraries(unit_tests PRIVATE kfc_lib kfc_view_core kfc_server_lib
-                      kfc_client_net)
+                      kfc_client_net kfc_app_core)
 
 # doctest is vendored under third_party/. The tests include it two ways:
 #   "third_party/doctest/doctest.h"  (resolved via the repo root, already set)

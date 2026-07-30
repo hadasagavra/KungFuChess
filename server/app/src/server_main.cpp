@@ -10,6 +10,7 @@
 #include "server/app/include/room_manager.hpp"
 #include "server/net/include/websocket_server.hpp"
 #include "server/store/include/sqlite_user_store.hpp"
+#include "shared/frame_step.hpp"
 #include "shared/log/include/logger.hpp"
 #include "shared/logic/io/include/board_parser.hpp"
 #include "shared/logic/model/include/board.hpp"
@@ -31,13 +32,6 @@ constexpr std::uint16_t defaultPort = 9000;
 // same clamp the client uses so a stalled frame cannot jump the clock.
 constexpr int frameMs = 16;
 constexpr int maxStepMs = 100;
-
-int elapsedMsSince(std::chrono::steady_clock::time_point last,
-                   std::chrono::steady_clock::time_point now) {
-    const auto ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(now - last).count();
-    return std::clamp(static_cast<int>(ms), 0, maxStepMs);
-}
 
 std::uint16_t portFrom(int argc, char** argv) {
     if (argc > 1) {
@@ -96,7 +90,7 @@ int main(int argc, char** argv) {
         while (true) {
             transport.poll();  // accept connections, read incoming messages
             const auto now = std::chrono::steady_clock::now();
-            manager.tick(elapsedMsSince(last, now));
+            manager.tick(kfc::clampedStepMs(last, now, maxStepMs));
             last = now;
             std::this_thread::sleep_for(std::chrono::milliseconds(frameMs));
         }

@@ -41,6 +41,8 @@ The tree is grouped by **deployment target** — `shared/` (client and server bo
 ```
 shared/                 # everything a client and a server both need
   error.hpp             # kfc::Error, the base exception; used by any layer
+  frame_step.hpp        # clampedStepMs: the per-frame real-time step, clamped;
+                        # shared by the client and server composition-root loops
   bus/                  # layer-neutral infrastructure — knows no game concept
     event_bus           # generic pub/sub; any layer may depend on it (header-only)
   logic/                # Business Logic — the whole of it
@@ -74,13 +76,21 @@ shared/                 # everything a client and a server both need
       wire_message      # the typed message variant + the one encode/decode seam
       text              # shared text tokens (+ flag helpers)
 client/                 # client-only code: the GUI plus the client's networking
+  app/                  # the client's orchestration layer (counterpart to server/app)
+    game_app            # the frame loop: Home screen vs board + input dispatch (graphics)
+    lobby_controller    # Home-screen state machine: clicks/keys -> lobby actions
+    cli                 # arg parsing (ClientOptions) + shell credential prompt (pure)
+    script_mode         # the --script text harness (runScript) (pure)
+    client_app          # runClient: parse args, load board, pick mode, run GameApp
+    src/client_main.cpp # the client executable's root -- a thin shim -> runClient
   input/                # GUI (input side)
     board_mapper        # pixel <-> cell mapping (display-coupled)
     game_access         # what the Controller drives: pieceAt + request move/jump
     local_game_access   # GameAccess over a same-process engine (script harness/tests)
     controller          # turns raw input into commands via GameAccess; owns selection
   net/                  # the client's networking runtime (kfc::net)
-    client_game         # the seam the frame loop drives (GameAccess + advance/snapshot)
+    lobby_access        # narrow seam the LobbyController drives (header-only)
+    client_game         # the seam the frame loop drives (GameAccess + LobbyAccess)
     remote_game         # a client's replica-backed view; sends commands, applies state
     endpoint            # parse "host:port" for --connect (header-only)
     loopback_transport  # a MessageTransport that hands server output to one client
@@ -115,7 +125,10 @@ texttests/            # scripted end-to-end test harness
 config/               # start_position.txt: the opening board, loaded by both roots
 third_party/          # vendored: doctest, img (Img + MouseWindow), opencv,
                       #   asio + websocketpp (header-only WebSocket stack)
-main.cpp              # the client composition root wiring the layers together
+
+# Both executables are thin composition-root shims that hand off to an app layer:
+# client/app/src/client_main.cpp -> app::runClient, and
+# server/app/src/server_main.cpp -> a RoomManager loop.
 
 tests/
   test_main.cpp       # doctest entry point
@@ -140,7 +153,7 @@ Note that the two groupings answer different questions and must both hold: `shar
 
 ### How events flow
 
-`GameEngine` exposes an `EventBus` (`engine.events()`) and publishes `model::MoveEvent` and `model::CapturedPiece` onto it. `MoveLog` and `ScoreBoard` subscribe. The subscription itself happens in `main.cpp` — the engine never learns who is listening, and a new listener (sound, end-of-game animation, a server relay) is a subscribe call and nothing else. Events carry domain data only: no notation string, no formatted clock. Turning a `MoveEvent` into `"Nxc6"` is `io::move_notation`'s job, at the boundary.
+`GameEngine` exposes an `EventBus` (`engine.events()`) and publishes `model::MoveEvent` and `model::CapturedPiece` onto it. `MoveLog` and `ScoreBoard` subscribe. The subscription itself happens in the composition/orchestration layer (`client/app`'s `GameApp`, or the server's `GameSession`) — the engine never learns who is listening, and a new listener (sound, end-of-game animation, a server relay) is a subscribe call and nothing else. Events carry domain data only: no notation string, no formatted clock. Turning a `MoveEvent` into `"Nxc6"` is `io::move_notation`'s job, at the boundary.
 
 The bus has three properties worth knowing: the event type is written explicitly at the call site (`subscribe<MoveEvent>(...)`), there is no unsubscribe (a subscriber must outlive the bus), and it is not thread-safe — a networked server would need to revisit that.
 
@@ -169,9 +182,11 @@ Targets, and why they are split:
 - `kfc_server` — the server app; no window, no OpenCV. `socket_tests` — the one real-socket test, its own binary.
 - `kfc_view_core` — the pure half of `client/view`: the seam, the Animator, asset paths, the config loader. Links `kfc_lib`, **not** OpenCV, so the unit tests can link it.
 - `kfc_view` — the drawing half: `Renderer`, `ImageView`, and the `Img`/`MouseWindow` wrapper. The only target that links OpenCV. Sources are listed explicitly, not globbed, because which side a file lands on is a design decision.
-- `kfc` — the app; `render_demo` — the PNG visual check; `unit_tests` — the doctest suite.
+- `kfc_app_core` — the pure half of `client/app`: the `LobbyController`, the CLI (options + credential prompt), and the `--script` harness. Links `kfc_client_net` + `kfc_view_core`, **not** OpenCV, so the unit tests link it. Sources listed explicitly (like the view split).
+- `kfc_app` — the graphics half of `client/app`: `GameApp` (the frame loop) and `runClient`. Links `kfc_app_core` + `kfc_view`.
+- `kfc` — the client app: its entry point (`client/app/src/client_main.cpp`) is a thin shim linking `kfc_app`. `render_demo` — the PNG visual check; `unit_tests` — the doctest suite.
 
-The one-way dependency (`kfc_view` → `kfc_view_core`) makes "graphics only via `Img`" a build-enforced rule: a core source that reaches for `img.hpp` or `opencv2/` fails to compile, because neither include directory is on `kfc_view_core`'s path.
+The one-way dependency (`kfc_view` → `kfc_view_core`, and `kfc_app` → `kfc_app_core`) makes "graphics only via `Img`" a build-enforced rule: a core source that reaches for `img.hpp` or `opencv2/` fails to compile, because neither include directory is on the core target's path.
 
 ## Naming conventions
 

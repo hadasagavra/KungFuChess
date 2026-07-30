@@ -5,19 +5,21 @@
 #include <string>
 
 #include "client/input/include/game_access.hpp"
+#include "client/net/include/lobby_access.hpp"
 #include "shared/bus/include/event_bus.hpp"
 #include "shared/logic/engine/include/game_engine.hpp"
 #include "shared/logic/model/include/position.hpp"
 
 namespace kfc::net {
 
-// The game as the frame loop drives it: a GameAccess (so the Controller can hold
-// the same object) plus the four things the loop needs each frame -- advance the
-// game, read its state to draw, ask where a selected piece may go, and reach the
-// event stream the moves log and score subscribe to. One implementation runs the
-// game over a same-process loopback; a socket-backed one will slot in beside it
-// without the loop changing.
-class ClientGame : public input::GameAccess {
+// The game as the frame loop drives it. It is a GameAccess (so the board
+// Controller can hold the same object) and a LobbyAccess (so the Home-screen
+// controller can), plus the things the loop needs each frame -- advance the game,
+// read its state to draw, ask where a selected piece may go, reach the event
+// stream the moves log and score subscribe to, and read the seat/room state a
+// game frame shows. One implementation runs the game over a same-process
+// loopback; a socket-backed one slots in beside it without the loop changing.
+class ClientGame : public input::GameAccess, public LobbyAccess {
 public:
     virtual void advance(int deltaMs) = 0;
     virtual engine::GameSnapshot getSnapshot() const = 0;
@@ -37,17 +39,13 @@ public:
     // root can report it and stop. Absent on a local game and a successful login.
     virtual std::optional<std::string> authError() const = 0;
 
-    // -- Lobby: the Home screen drives these ------------------------------------
-    // A local game has no lobby: it is always in a game, so the actions do nothing
-    // and the state is empty. A networked game delegates to its server view.
-    virtual void seekGame() = 0;
-    virtual void cancelSeek() = 0;
-    virtual void createRoom() = 0;
-    virtual void joinRoom(const std::string& roomId) = 0;
-    virtual bool isSearching() const = 0;
+    // The lobby actions and isSearching()/statusMessage() come from LobbyAccess.
+    // A local game has no lobby: it is always in a game, so those actions do
+    // nothing and its state is empty. These game-frame reads stay here:
+    // whether the server has seated this client, the room shown at the top of the
+    // board, and a disconnected opponent's forfeit countdown.
     virtual bool isInGame() const = 0;
     virtual std::string roomId() const = 0;
-    virtual std::string statusMessage() const = 0;
     virtual std::optional<int> opponentCountdown() const = 0;
 };
 
