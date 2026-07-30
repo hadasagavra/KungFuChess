@@ -1,9 +1,12 @@
 #include "shared/logic/io/include/wire_message.hpp"
 
 #include <exception>
+#include <optional>
 #include <sstream>
 #include <string>
-#include <vector>
+#include <string_view>
+#include <type_traits>
+#include <variant>
 
 #include "shared/logic/io/include/event_codec.hpp"
 #include "shared/logic/io/include/piece_codec.hpp"
@@ -12,78 +15,55 @@
 namespace kfc::io {
 namespace {
 
-// The tag that names each message kind on the wire. Confined to this file: it is
-// the private alphabet of the protocol, and nothing outside encode/decode reads
-// or writes it.
-constexpr const char* commandTag = "CMD";      // a client's move/jump request
-constexpr const char* roleTag = "ROLE";        // the colour a client plays
-constexpr const char* moveTag = "MOVE";        // a MoveEvent
-constexpr const char* captureTag = "CAPTURE";  // a CapturedPiece
-constexpr const char* stateTag = "STATE";      // a whole game frame
-constexpr const char* loginTag = "LOGIN";      // a client's credentials
-constexpr const char* rosterTag = "ROSTER";    // both players' names + ratings
-constexpr const char* authFailTag = "AUTHFAIL";  // a refused login
-
-// Lobby message tags.
-constexpr const char* seekTag = "SEEK";        // Play: find any opponent
-constexpr const char* cancelSeekTag = "CANCEL";  // stop looking
-constexpr const char* createRoomTag = "CREATE";  // open a new room
-constexpr const char* joinRoomTag = "JOIN";      // join a room by id
-constexpr const char* enteredRoomTag = "ROOM";   // you are in this room
-constexpr const char* noMatchTag = "NOMATCH";    // search gave up
-constexpr const char* roomErrorTag = "ROOMERR";  // a lobby request failed
-constexpr const char* oppGoneTag = "OPPGONE";    // opponent dropped, N seconds
-constexpr const char* oppBackTag = "OPPBACK";    // opponent returned
-
-// The role payload for a spectator, distinct from either colour letter.
-constexpr char spectatorMark = '-';
-
-// Inside a login payload each field is one line: this keyword, a space, then the
-// value (which may itself hold spaces).
-constexpr const char* userKeyword = "user";
-constexpr const char* passKeyword = "pass";
-
-// Inside a roster payload each named seat is one line: this keyword, a space,
-// the rating, a space, then the name (which may itself hold spaces). A seat with
-// no name is omitted.
-constexpr const char* whiteSeatKeyword = "white";
-constexpr const char* blackSeatKeyword = "black";
+// ===========================================================================
+// One message, one place. Each WireMessage alternative has a WireCodec<T>
+// specialization that is the SINGLE source of truth for how that message sits on
+// the wire: its tag, how its payload is written, and how it is read back. The
+// generic encode()/decode() below drive everything off these specializations, so
+// there is no parallel tag table and no per-message if/else chain to keep in
+// sync -- adding a message is one specialization plus one entry in the variant,
+// and forgetting the specialization is a compile error (WireCodec<T> undefined).
+//
+// A codec provides:
+//   static constexpr std::string_view tag;
+//   static std::string encodePayload(const T&, int boardHeight);   // no tag
+//   static std::optional<T> decodePayload(std::string_view, int);  // no tag
+// The board height is passed to every codec for a uniform signature; codecs that
+// carry no board square simply ignore it.
+// ===========================================================================
+template <typename T>
+struct WireCodec;  // no primary definition: every message must specialize it
 
 // A tag joined to its payload. The payload may hold spaces and newlines (a state
 // frame does); only the first space, the one this inserts, separates the two.
-std::string join(const std::string& tag, const std::string& payload) {
-    return tag + " " + payload;
+std::string join(std::string_view tag, const std::string& payload) {
+    std::string message(tag);
+    message += ' ';
+    message += payload;
+    return message;
 }
 
 // A message split at its first space into the tag and the payload after it.
 struct Split {
-    std::string tag;
-    std::string payload;
+    std::string_view tag;
+    std::string_view payload;
 };
 
-Split split(const std::string& message) {
+Split split(std::string_view message) {
     const std::size_t space = message.find(' ');
-    if (space == std::string::npos) return {message, ""};
+    if (space == std::string_view::npos) return {message, {}};
     return {message.substr(0, space), message.substr(space + 1)};
 }
 
-std::string encodeRole(const RoleAssignment& role) {
-    const char letter = role.color ? colorLetter(*role.color) : spectatorMark;
-    return join(roleTag, std::string(1, letter));
-}
-
-std::optional<RoleAssignment> decodeRole(const std::string& payload) {
-    if (payload.size() != 1) return std::nullopt;
-    const char letter = payload[0];
-    if (letter == colorLetter(model::Color::White)) {
-        return RoleAssignment{model::Color::White};
-    }
-    if (letter == colorLetter(model::Color::Black)) {
-        return RoleAssignment{model::Color::Black};
-    }
-    if (letter == spectatorMark) return RoleAssignment{std::nullopt};
-    return std::nullopt;
-}
+// -- Payload-internal vocabulary -------------------------------------------------
+// These name the structure INSIDE a payload (not the message tags), shared by the
+// one message's encode and decode. The spectator role marker, and the line
+// keywords used by the login and roster payloads.
+constexpr char spectatorMark = '-';  // distinct from either colour letter
+constexpr const char* userKeyword = "user";
+constexpr const char* passKeyword = "pass";
+constexpr const char* whiteSeatKeyword = "white";
+constexpr const char* blackSeatKeyword = "black";
 
 // One "keyword value" line, the value being the whole remainder so it may hold
 // spaces. Split at the first space; nullopt if the line has no keyword+value.
@@ -98,16 +78,34 @@ std::optional<KeyValue> keyValue(const std::string& line) {
     return KeyValue{line.substr(0, space), line.substr(space + 1)};
 }
 
-std::string encodeLogin(const Login& login) {
-    const std::string payload = std::string(userKeyword) + ' ' + login.username +
-                                '\n' + passKeyword + ' ' + login.password + '\n';
-    return join(loginTag, payload);
+// -- The role payload: one colour letter, or the spectator mark ------------------
+std::string encodeRolePayload(const RoleAssignment& role) {
+    return std::string(1, role.color ? colorLetter(*role.color) : spectatorMark);
 }
 
-std::optional<Login> decodeLogin(const std::string& payload) {
+std::optional<RoleAssignment> decodeRolePayload(std::string_view payload) {
+    if (payload.size() != 1) return std::nullopt;
+    const char letter = payload[0];
+    if (letter == colorLetter(model::Color::White)) {
+        return RoleAssignment{model::Color::White};
+    }
+    if (letter == colorLetter(model::Color::Black)) {
+        return RoleAssignment{model::Color::Black};
+    }
+    if (letter == spectatorMark) return RoleAssignment{std::nullopt};
+    return std::nullopt;
+}
+
+// -- The login payload: a "user" line and a "pass" line --------------------------
+std::string encodeLoginPayload(const Login& login) {
+    return std::string(userKeyword) + ' ' + login.username + '\n' + passKeyword +
+           ' ' + login.password + '\n';
+}
+
+std::optional<Login> decodeLoginPayload(std::string_view payload) {
     std::optional<std::string> username;
     std::optional<std::string> password;
-    std::istringstream in{payload};
+    std::istringstream in{std::string(payload)};
     std::string line;
     while (std::getline(in, line)) {
         const std::optional<KeyValue> field = keyValue(line);
@@ -122,15 +120,14 @@ std::optional<Login> decodeLogin(const std::string& payload) {
     return Login{*username, *password};
 }
 
-// One roster line: the seat keyword, the rating, then the name. The rating is a
-// single token; the name is the remainder, so it may hold spaces of its own.
+// -- The roster payload: a "<seat> <rating> <name>" line per named seat ----------
 std::string rosterLine(const char* seatKeyword, int rating,
                        const std::string& name) {
     return std::string(seatKeyword) + ' ' + std::to_string(rating) + ' ' + name +
            '\n';
 }
 
-std::string encodeRoster(const PlayerRoster& roster) {
+std::string encodeRosterPayload(const PlayerRoster& roster) {
     std::string payload;
     if (roster.whiteName) {
         payload += rosterLine(whiteSeatKeyword, roster.whiteRating.value_or(0),
@@ -140,12 +137,12 @@ std::string encodeRoster(const PlayerRoster& roster) {
         payload += rosterLine(blackSeatKeyword, roster.blackRating.value_or(0),
                               *roster.blackName);
     }
-    return join(rosterTag, payload);
+    return payload;
 }
 
-std::optional<PlayerRoster> decodeRoster(const std::string& payload) {
+std::optional<PlayerRoster> decodeRosterPayload(std::string_view payload) {
     PlayerRoster roster;
-    std::istringstream in{payload};
+    std::istringstream in{std::string(payload)};
     std::string line;
     while (std::getline(in, line)) {
         const std::optional<KeyValue> field = keyValue(line);
@@ -158,12 +155,11 @@ std::optional<PlayerRoster> decodeRoster(const std::string& payload) {
         } catch (const std::exception&) {
             continue;  // an unreadable rating: skip this seat line
         }
-        const std::string name = rest->value;
         if (field->keyword == whiteSeatKeyword) {
-            roster.whiteName = name;
+            roster.whiteName = rest->value;
             roster.whiteRating = rating;
         } else if (field->keyword == blackSeatKeyword) {
-            roster.blackName = name;
+            roster.blackName = rest->value;
             roster.blackRating = rating;
         }
         // Any other keyword is unknown and ignored, mirroring the state decoder.
@@ -171,122 +167,251 @@ std::optional<PlayerRoster> decodeRoster(const std::string& payload) {
     return roster;
 }
 
-std::string encodeAuthRejected(const AuthRejected& rejected) {
-    return join(authFailTag, rejected.reason);
+// A payload that is a single non-blank id (a room id). Empty is not a message.
+std::optional<std::string> nonEmptyId(std::string_view payload) {
+    const std::string id = trim(std::string(payload));
+    if (id.empty()) return std::nullopt;
+    return id;
 }
 
-std::optional<AuthRejected> decodeAuthRejected(const std::string& payload) {
-    return AuthRejected{payload};
+// ===========================================================================
+// The codecs. Each is short and self-contained; the interesting per-message
+// logic lives in the helpers above, reused verbatim.
+// ===========================================================================
+
+template <>
+struct WireCodec<PlayerCommand> {
+    static constexpr std::string_view tag = "CMD";
+    static std::string encodePayload(const PlayerCommand& m, int h) {
+        return encodeCommand(m, h);
+    }
+    static std::optional<PlayerCommand> decodePayload(std::string_view p, int h) {
+        return decodeCommand(std::string(p), h);
+    }
+};
+
+template <>
+struct WireCodec<RoleAssignment> {
+    static constexpr std::string_view tag = "ROLE";
+    static std::string encodePayload(const RoleAssignment& m, int) {
+        return encodeRolePayload(m);
+    }
+    static std::optional<RoleAssignment> decodePayload(std::string_view p, int) {
+        return decodeRolePayload(p);
+    }
+};
+
+template <>
+struct WireCodec<model::MoveEvent> {
+    static constexpr std::string_view tag = "MOVE";
+    static std::string encodePayload(const model::MoveEvent& m, int h) {
+        return encodeMoveEvent(m, h);
+    }
+    static std::optional<model::MoveEvent> decodePayload(std::string_view p,
+                                                         int h) {
+        return decodeMoveEvent(std::string(p), h);
+    }
+};
+
+template <>
+struct WireCodec<model::CapturedPiece> {
+    static constexpr std::string_view tag = "CAPTURE";
+    static std::string encodePayload(const model::CapturedPiece& m, int) {
+        return encodeCapturedPiece(m);
+    }
+    static std::optional<model::CapturedPiece> decodePayload(std::string_view p,
+                                                             int) {
+        return decodeCapturedPiece(std::string(p));
+    }
+};
+
+template <>
+struct WireCodec<StateUpdate> {
+    static constexpr std::string_view tag = "STATE";
+    static std::string encodePayload(const StateUpdate& m, int) {
+        return m.frame;
+    }
+    static std::optional<StateUpdate> decodePayload(std::string_view p, int) {
+        return StateUpdate{std::string(p)};
+    }
+};
+
+template <>
+struct WireCodec<Login> {
+    static constexpr std::string_view tag = "LOGIN";
+    static std::string encodePayload(const Login& m, int) {
+        return encodeLoginPayload(m);
+    }
+    static std::optional<Login> decodePayload(std::string_view p, int) {
+        return decodeLoginPayload(p);
+    }
+};
+
+template <>
+struct WireCodec<PlayerRoster> {
+    static constexpr std::string_view tag = "ROSTER";
+    static std::string encodePayload(const PlayerRoster& m, int) {
+        return encodeRosterPayload(m);
+    }
+    static std::optional<PlayerRoster> decodePayload(std::string_view p, int) {
+        return decodeRosterPayload(p);
+    }
+};
+
+template <>
+struct WireCodec<AuthRejected> {
+    static constexpr std::string_view tag = "AUTHFAIL";
+    static std::string encodePayload(const AuthRejected& m, int) {
+        return m.reason;
+    }
+    static std::optional<AuthRejected> decodePayload(std::string_view p, int) {
+        return AuthRejected{std::string(p)};
+    }
+};
+
+// -- Lobby: three tag-only requests (no payload) and their room/error replies ----
+template <>
+struct WireCodec<SeekGame> {
+    static constexpr std::string_view tag = "SEEK";
+    static std::string encodePayload(const SeekGame&, int) { return ""; }
+    static std::optional<SeekGame> decodePayload(std::string_view, int) {
+        return SeekGame{};
+    }
+};
+
+template <>
+struct WireCodec<CancelSeek> {
+    static constexpr std::string_view tag = "CANCEL";
+    static std::string encodePayload(const CancelSeek&, int) { return ""; }
+    static std::optional<CancelSeek> decodePayload(std::string_view, int) {
+        return CancelSeek{};
+    }
+};
+
+template <>
+struct WireCodec<CreateRoom> {
+    static constexpr std::string_view tag = "CREATE";
+    static std::string encodePayload(const CreateRoom&, int) { return ""; }
+    static std::optional<CreateRoom> decodePayload(std::string_view, int) {
+        return CreateRoom{};
+    }
+};
+
+template <>
+struct WireCodec<JoinRoom> {
+    static constexpr std::string_view tag = "JOIN";
+    static std::string encodePayload(const JoinRoom& m, int) { return m.roomId; }
+    static std::optional<JoinRoom> decodePayload(std::string_view p, int) {
+        if (const std::optional<std::string> id = nonEmptyId(p)) {
+            return JoinRoom{*id};
+        }
+        return std::nullopt;
+    }
+};
+
+template <>
+struct WireCodec<EnteredRoom> {
+    static constexpr std::string_view tag = "ROOM";
+    static std::string encodePayload(const EnteredRoom& m, int) {
+        return m.roomId;
+    }
+    static std::optional<EnteredRoom> decodePayload(std::string_view p, int) {
+        if (const std::optional<std::string> id = nonEmptyId(p)) {
+            return EnteredRoom{*id};
+        }
+        return std::nullopt;
+    }
+};
+
+template <>
+struct WireCodec<NoMatch> {
+    static constexpr std::string_view tag = "NOMATCH";
+    static std::string encodePayload(const NoMatch&, int) { return ""; }
+    static std::optional<NoMatch> decodePayload(std::string_view, int) {
+        return NoMatch{};
+    }
+};
+
+template <>
+struct WireCodec<RoomError> {
+    static constexpr std::string_view tag = "ROOMERR";
+    static std::string encodePayload(const RoomError& m, int) {
+        return m.reason;
+    }
+    static std::optional<RoomError> decodePayload(std::string_view p, int) {
+        return RoomError{std::string(p)};
+    }
+};
+
+template <>
+struct WireCodec<OpponentDisconnected> {
+    static constexpr std::string_view tag = "OPPGONE";
+    static std::string encodePayload(const OpponentDisconnected& m, int) {
+        return std::to_string(m.secondsLeft);
+    }
+    static std::optional<OpponentDisconnected> decodePayload(std::string_view p,
+                                                             int) {
+        try {
+            return OpponentDisconnected{std::stoi(std::string(p))};
+        } catch (const std::exception&) {
+            return std::nullopt;
+        }
+    }
+};
+
+template <>
+struct WireCodec<OpponentReconnected> {
+    static constexpr std::string_view tag = "OPPBACK";
+    static std::string encodePayload(const OpponentReconnected&, int) {
+        return "";
+    }
+    static std::optional<OpponentReconnected> decodePayload(std::string_view,
+                                                            int) {
+        return OpponentReconnected{};
+    }
+};
+
+// If `tag` names message T, decode its payload into `out` and report the match.
+// A matched-but-malformed payload still counts as a match (out stays empty), so
+// the search stops rather than trying another codec.
+template <typename T>
+bool matchDecode(std::string_view tag, std::string_view payload, int height,
+                 std::optional<WireMessage>& out) {
+    if (tag != WireCodec<T>::tag) return false;
+    if (std::optional<T> value = WireCodec<T>::decodePayload(payload, height)) {
+        out = WireMessage{std::move(*value)};
+    }
+    return true;
+}
+
+// Try each alternative of the WireMessage variant in turn (a fold over its type
+// list), stopping at the codec whose tag matches. The variant pointer is only a
+// carrier for the type pack; it is never dereferenced.
+template <typename... Ts>
+std::optional<WireMessage> decodeVariant(const std::variant<Ts...>*,
+                                         std::string_view tag,
+                                         std::string_view payload, int height) {
+    std::optional<WireMessage> out;
+    (matchDecode<Ts>(tag, payload, height, out) || ...);
+    return out;
 }
 
 }  // namespace
 
 std::string encode(const WireMessage& message, int boardHeight) {
     return std::visit(
-        [boardHeight](const auto& value) -> std::string {
+        [boardHeight](const auto& value) {
             using T = std::decay_t<decltype(value)>;
-            if constexpr (std::is_same_v<T, PlayerCommand>) {
-                return join(commandTag, encodeCommand(value, boardHeight));
-            } else if constexpr (std::is_same_v<T, RoleAssignment>) {
-                return encodeRole(value);
-            } else if constexpr (std::is_same_v<T, model::MoveEvent>) {
-                return join(moveTag, encodeMoveEvent(value, boardHeight));
-            } else if constexpr (std::is_same_v<T, model::CapturedPiece>) {
-                return join(captureTag, encodeCapturedPiece(value));
-            } else if constexpr (std::is_same_v<T, StateUpdate>) {
-                return join(stateTag, value.frame);
-            } else if constexpr (std::is_same_v<T, Login>) {
-                return encodeLogin(value);
-            } else if constexpr (std::is_same_v<T, PlayerRoster>) {
-                return encodeRoster(value);
-            } else if constexpr (std::is_same_v<T, AuthRejected>) {
-                return encodeAuthRejected(value);
-            } else if constexpr (std::is_same_v<T, SeekGame>) {
-                return std::string(seekTag);
-            } else if constexpr (std::is_same_v<T, CancelSeek>) {
-                return std::string(cancelSeekTag);
-            } else if constexpr (std::is_same_v<T, CreateRoom>) {
-                return std::string(createRoomTag);
-            } else if constexpr (std::is_same_v<T, JoinRoom>) {
-                return join(joinRoomTag, value.roomId);
-            } else if constexpr (std::is_same_v<T, EnteredRoom>) {
-                return join(enteredRoomTag, value.roomId);
-            } else if constexpr (std::is_same_v<T, NoMatch>) {
-                return std::string(noMatchTag);
-            } else if constexpr (std::is_same_v<T, RoomError>) {
-                return join(roomErrorTag, value.reason);
-            } else if constexpr (std::is_same_v<T, OpponentDisconnected>) {
-                return join(oppGoneTag, std::to_string(value.secondsLeft));
-            } else {  // OpponentReconnected
-                return std::string(oppBackTag);
-            }
+            return join(WireCodec<T>::tag,
+                        WireCodec<T>::encodePayload(value, boardHeight));
         },
         message);
 }
 
 std::optional<WireMessage> decode(const std::string& text, int boardHeight) {
     const Split parts = split(text);
-
-    if (parts.tag == commandTag) {
-        if (const std::optional<PlayerCommand> command =
-                decodeCommand(parts.payload, boardHeight)) {
-            return WireMessage{*command};
-        }
-    } else if (parts.tag == roleTag) {
-        if (const std::optional<RoleAssignment> role = decodeRole(parts.payload)) {
-            return WireMessage{*role};
-        }
-    } else if (parts.tag == moveTag) {
-        if (const std::optional<model::MoveEvent> event =
-                decodeMoveEvent(parts.payload, boardHeight)) {
-            return WireMessage{*event};
-        }
-    } else if (parts.tag == captureTag) {
-        if (const std::optional<model::CapturedPiece> captured =
-                decodeCapturedPiece(parts.payload)) {
-            return WireMessage{*captured};
-        }
-    } else if (parts.tag == stateTag) {
-        return WireMessage{StateUpdate{parts.payload}};
-    } else if (parts.tag == loginTag) {
-        if (const std::optional<Login> login = decodeLogin(parts.payload)) {
-            return WireMessage{*login};
-        }
-    } else if (parts.tag == rosterTag) {
-        if (const std::optional<PlayerRoster> roster = decodeRoster(parts.payload)) {
-            return WireMessage{*roster};
-        }
-    } else if (parts.tag == authFailTag) {
-        if (const std::optional<AuthRejected> rejected =
-                decodeAuthRejected(parts.payload)) {
-            return WireMessage{*rejected};
-        }
-    } else if (parts.tag == seekTag) {
-        return WireMessage{SeekGame{}};
-    } else if (parts.tag == cancelSeekTag) {
-        return WireMessage{CancelSeek{}};
-    } else if (parts.tag == createRoomTag) {
-        return WireMessage{CreateRoom{}};
-    } else if (parts.tag == joinRoomTag) {
-        const std::string roomId = trim(parts.payload);
-        if (!roomId.empty()) return WireMessage{JoinRoom{roomId}};
-    } else if (parts.tag == enteredRoomTag) {
-        const std::string roomId = trim(parts.payload);
-        if (!roomId.empty()) return WireMessage{EnteredRoom{roomId}};
-    } else if (parts.tag == noMatchTag) {
-        return WireMessage{NoMatch{}};
-    } else if (parts.tag == roomErrorTag) {
-        return WireMessage{RoomError{parts.payload}};
-    } else if (parts.tag == oppGoneTag) {
-        try {
-            return WireMessage{OpponentDisconnected{std::stoi(parts.payload)}};
-        } catch (const std::exception&) {
-            return std::nullopt;
-        }
-    } else if (parts.tag == oppBackTag) {
-        return WireMessage{OpponentReconnected{}};
-    }
-    return std::nullopt;
+    return decodeVariant(static_cast<const WireMessage*>(nullptr), parts.tag,
+                         parts.payload, boardHeight);
 }
 
 }  // namespace kfc::io
