@@ -58,7 +58,7 @@ private:
     // Play: queue the client, or -- if a compatible opponent is waiting -- put
     // the two in a fresh room together.
     void handleSeek(ClientId client);
-    void routeCommand(ClientId client, const std::string& text);
+    void routeCommand(ClientId client, const io::PlayerCommand& command);
 
     // Seat an authenticated client into a room and tell it which room it is in.
     void enterRoom(ClientId client, Room& room);

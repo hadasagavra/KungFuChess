@@ -37,12 +37,12 @@ void Room::addClient(ClientId client, const std::string& username, int rating) {
     session_.addClient(client, username, rating);
 }
 
-void Room::handleMessage(ClientId client, const std::string& text) {
-    session_.handleMessage(client, text);
+void Room::applyCommand(ClientId client, const io::PlayerCommand& command) {
+    session_.applyCommand(client, command);
 }
 
 void Room::handleDisconnect(ClientId client) {
-    const std::optional<GameSession::Seat> seat = session_.playerSeat(client);
+    const std::optional<Occupant> seat = session_.playerSeat(client);
     members_.erase(client);
     if (!seat) {
         session_.vacate(client);  // a spectator (or unknown) simply leaves
@@ -50,9 +50,10 @@ void Room::handleDisconnect(ClientId client) {
     }
     if (session_.isOver()) return;  // nothing to forfeit once the game has ended
     // Keep the seat reserved (leave it in the session) so no one else takes the
-    // colour, and start the countdown to a forfeit.
+    // colour, and start the countdown to a forfeit. playerSeat only returns
+    // players, so the occupant's colour is always present here.
     vacancies_.push_back(
-        Vacancy{seat->color, seat->username, seat->rating, client,
+        Vacancy{*seat->color, seat->username, seat->rating, client,
                 disconnectGraceMs, -1});
 }
 

@@ -36,8 +36,8 @@ public:
     // into that seat, cancelling its forfeit countdown.
     void addClient(ClientId client, const std::string& username, int rating);
 
-    // Forward a seated client's message to the game (only a command acts).
-    void handleMessage(ClientId client, const std::string& text);
+    // Apply a decoded command from a seated client to the game.
+    void applyCommand(ClientId client, const io::PlayerCommand& command);
 
     // A client's connection dropped. A seated player's seat is reserved and a
     // forfeit countdown begins; a spectator is simply removed.

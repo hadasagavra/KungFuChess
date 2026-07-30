@@ -42,7 +42,9 @@ void RoomManager::handleMessage(ClientId client, const std::string& text) {
             [&](const io::Login& login) { handleLogin(client, login); },
             [&](const io::CreateRoom&) { handleCreateRoom(client); },
             [&](const io::JoinRoom& join) { handleJoinRoom(client, join); },
-            [&](const io::PlayerCommand&) { routeCommand(client, text); },
+            [&](const io::PlayerCommand& command) {
+                routeCommand(client, command);
+            },
             [&](const io::SeekGame&) { handleSeek(client); },
             [&](const io::CancelSeek&) { matchmaker_.cancel(client); },
             // A client cannot send the server its own answers; these are ignored.
@@ -123,12 +125,12 @@ void RoomManager::handleSeek(ClientId client) {
     enterRoom(client, room);
 }
 
-void RoomManager::routeCommand(ClientId client, const std::string& text) {
+void RoomManager::routeCommand(ClientId client, const io::PlayerCommand& command) {
     const auto found = clients_.find(client);
     if (found == clients_.end() || !found->second.room) return;
     const auto room = rooms_.find(*found->second.room);
     if (room == rooms_.end()) return;
-    room->second->handleMessage(client, text);
+    room->second->applyCommand(client, command);
 }
 
 void RoomManager::enterRoom(ClientId client, Room& room) {
